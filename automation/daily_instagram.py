@@ -77,10 +77,10 @@ def generate_image(image_prompt: str) -> Path:
         "https://api.openai.com/v1/images/generations",
         headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
         json={
-            "model": "dall-e-3",
+            "model": "gpt-image-1",
             "prompt": image_prompt,
             "size": "1024x1024",
-            "quality": "hd",
+            "quality": "high",
             "n": 1,
         },
         timeout=120,
