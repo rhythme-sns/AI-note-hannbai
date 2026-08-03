@@ -1,3 +1,4 @@
+import json
 import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -38,6 +39,23 @@ def generate_with_search(prompt: str, max_tokens: int = 4000, timeout: float = 3
         messages=[{"role": "user", "content": prompt}],
     )
     return "".join(block.text for block in response.content if block.type == "text")
+
+
+def generate_structured_with_search(
+    prompt: str, schema: dict, max_tokens: int = 4000, timeout: float = 300.0
+) -> dict:
+    """Web検索ツール付きで呼び出し、指定したJSONスキーマに沿ったdictを返す。
+    完全自動投稿など、人がレビューしない用途で出力パースの信頼性を上げるために使う。
+    """
+    response = client.with_options(timeout=timeout).messages.create(
+        model=MODEL,
+        max_tokens=max_tokens,
+        tools=[{"type": "web_search_20260209", "name": "web_search"}],
+        output_config={"format": {"type": "json_schema", "schema": schema}},
+        messages=[{"role": "user", "content": prompt}],
+    )
+    text = "".join(block.text for block in response.content if block.type == "text")
+    return json.loads(text)
 
 
 def send_mail(subject: str, body: str, attachment_path: Path | None = None) -> None:

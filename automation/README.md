@@ -5,13 +5,14 @@ GitHub Actions(クラウド)上で動くPythonスクリプトです。**PCの電
 
 ## 何をするか
 
-| スクリプト | 内容 | 送信先 | 実行タイミング |
+| スクリプト | 内容 | 投稿・送信先 | 実行タイミング |
 |---|---|---|---|
-| `daily_sns.py` | Web検索でAI活用インフルエンサーの傾向を調べ、今日のX投稿案(単発+スレッド)を作成 | メール | 毎日 9:00 JST |
-| `weekly_note.py` | 似た発信者をリサーチし、まだ扱っていない新テーマを自分で提案してnote新作(企画〜集客文まで)を作成。扱ったテーマは `themes_log.json` に記録し、二度と同じテーマを提案しない | メール | 毎週月曜 9:15 JST |
-| `daily_instagram.py` | Instagram用画像(OpenAIで生成)+キャプションを作成、画像を添付 | メール(添付ファイルあり) | 毎日 8:00 JST |
+| `daily_sns.py` | Web検索でAI活用インフルエンサーの傾向を調べ、単発ポスト+14ツイートのスレッドを生成し、**XとThreadsに自動投稿**する | X・Threadsに自動投稿 + 結果報告メール | 毎日 9:00 JST |
+| `weekly_note.py` | 似た発信者をリサーチし、まだ扱っていない新テーマを自分で提案してnote新作(企画〜集客文まで)を作成。扱ったテーマは `themes_log.json` に記録し、二度と同じテーマを提案しない | メール(下書き、要手動投稿) | 毎週月曜 9:15 JST |
+| `daily_instagram.py` | Instagram用画像(OpenAIで生成、クリエイター/デザイナー風の情景をランダム生成)+キャプションを作成 | メール(下書き、添付ファイルあり、要手動投稿) | 毎日 8:00 JST |
 
-いずれも**下書きを作ってメールで送るだけ**です。実際の投稿はご自身で行ってください。
+> ⚠ **`daily_sns.py` のみ完全自動投稿です。**人の確認を挟まず、生成された内容がそのままX・Threadsに公開されます。
+> note・Instagramは引き続き下書きメールのみで、実際の投稿はご自身で行ってください。
 
 ---
 
@@ -29,7 +30,7 @@ GitHub Actions(クラウド)上で動くPythonスクリプトです。**PCの電
 
 1. https://platform.openai.com にアクセスし、アカウントを作成(またはログイン)
 2. **Settings → Billing** で支払い方法を登録し、少額のクレジットを追加する
-3. **API keys** から新規キー(`sk-...`)を作成しコピーする(DALL-E 3 HDは1枚約$0.08)
+3. **API keys** から新規キー(`sk-...`)を作成しコピーする
 
 ### 3. Gmailアプリパスワードの発行(goliath24520@gmail.comで送信)
 
@@ -38,16 +39,59 @@ GitHub Actions(クラウド)上で動くPythonスクリプトです。**PCの電
 3. https://myaccount.google.com/apppasswords を開き、アプリ名(例:「note自動化」)を入力して作成
 4. 表示された16桁のパスワード(スペースなしでOK)を控えておく
 
-### 4. GitHubリポジトリを作る
+### 4. X (旧Twitter) APIキーの取得(自動投稿用)
+
+投稿先の「サカキ」用Xアカウントでログインした状態で進めてください。
+
+1. https://developer.x.com にアクセスし、開発者アカウントを申請・作成する
+2. 「Projects & Apps」から新しいプロジェクト・アプリを作成する
+3. 作成したアプリの **Settings → User authentication settings** を開き、
+   - App permissions を **Read and Write** に変更
+   - Type of App は「Web App, Automated App or Bot」を選択
+   - Callback URI / Website URL は仮で `https://example.com` などを入力(自動投稿だけなら実際に使いません)
+4. **Keys and tokens** タブを開き、以下4つを発行・コピーする(権限変更後は再発行が必要です):
+   - API Key / API Key Secret
+   - Access Token / Access Token Secret(「Generate」ボタンで発行。Read and Write権限になっていることを確認)
+
+> 無料プランでも投稿(POST)は可能ですが、月間投稿数に上限があります。現在の上限は
+> developer.x.com のダッシュボードで確認してください。想定投稿数(単発1件+スレッド14件=1日15件、
+> X・Threads合計で1日30件×30日=約900件)が上限を超えそうな場合は、有料プランへの変更を検討してください。
+
+### 5. Threads APIキーの取得(自動投稿用)
+
+投稿先の「サカキ」用Threadsアカウント(Instagramと連携したプロフェッショナルアカウントである必要があります)で進めてください。
+
+1. https://developers.facebook.com にアクセスし、開発者アカウントを作成する
+2. 「My Apps」から新しいアプリを作成(タイプは「Other」→「Business」などを選択)
+3. アプリのダッシュボードで **製品を追加** から「Threads API」を追加する
+4. Threads APIの設定画面から、投稿したいThreadsアカウントを連携する
+5. **Graph API Explorer**(https://developers.facebook.com/tools/explorer/)を開き、
+   作成したアプリを選択→対象のThreadsユーザーとしてアクセストークンを発行する
+   (`threads_basic`, `threads_content_publish` の権限を付与)
+6. 発行された短期トークンを、長期(60日)トークンに交換する(以下のURLをブラウザで開く。
+   `{app-id}` `{app-secret}` `{short-lived-token}` は実際の値に置き換える):
+   ```
+   https://graph.threads.net/access_token?grant_type=th_exchange_token&client_id={app-id}&client_secret={app-secret}&access_token={short-lived-token}
+   ```
+   返ってきたJSONの `access_token` が `THREADS_ACCESS_TOKEN` です
+7. 投稿対象の `THREADS_USER_ID` は、以下のURLで確認できます:
+   ```
+   https://graph.threads.net/v1.0/me?fields=id,username&access_token={long-lived-token}
+   ```
+
+> ⚠ **長期トークンは60日で失効します。** 失効するとThreads投稿だけがエラーになります(Xやnote/Instagramは影響を受けません)。
+> 60日ごとに上記6の交換URLを再度実行してSecretsを更新するか、失効前にリマインダーを設定しておくことをおすすめします。
+
+### 6. GitHubリポジトリを作る
 
 1. https://github.com/new を開く
-2. リポジトリ名を決める(例:`note-automation`)、**Private** を選択して「Create repository」
-3. 作成後に表示されるリモートURLを控えておく(例:`https://github.com/あなたのID/note-automation.git`)
+2. リポジトリ名を決める、**Private** を選択して「Create repository」
+3. 作成後に表示されるリモートURLを控えておく
 
-### 5. Secrets(暗号化された環境変数)を登録する
+### 7. Secrets(暗号化された環境変数)を登録する
 
 作成したリポジトリの **Settings → Secrets and variables → Actions → New repository secret** から、
-以下5つをそれぞれ登録してください(値は前の手順で控えたもの):
+以下をそれぞれ登録してください(値は前の手順で控えたもの):
 
 | Secret名 | 値 |
 |---|---|
@@ -56,29 +100,34 @@ GitHub Actions(クラウド)上で動くPythonスクリプトです。**PCの電
 | `GMAIL_ADDRESS` | `goliath24520@gmail.com` |
 | `GMAIL_APP_PASSWORD` | (16桁のアプリパスワード) |
 | `MAIL_TO` | `reon24520@gmail.com` |
+| `X_API_KEY` | Xの API Key |
+| `X_API_SECRET` | Xの API Key Secret |
+| `X_ACCESS_TOKEN` | Xの Access Token |
+| `X_ACCESS_TOKEN_SECRET` | Xの Access Token Secret |
+| `THREADS_USER_ID` | ThreadsユーザーID |
+| `THREADS_ACCESS_TOKEN` | Threads長期アクセストークン |
 
-### 6. このフォルダをGitHubにpushする
+### 8. このフォルダをGitHubにpushする
 
-このプロジェクトフォルダ(`notehannbai2`)のルートで実行してください。
+このプロジェクトフォルダ(`notehannbai2`)のルートで実行してください(すでにpush済みの場合は不要です)。
 
 ```bash
 cd "C:\Users\reon2\OneDrive\デスクトップ\notehannbai2"
-git init
 git add .
-git commit -m "note自動化の初期セットアップ"
-git branch -M main
-git remote add origin https://github.com/あなたのID/note-automation.git
-git push -u origin main
+git commit -m "X/Threads自動投稿対応"
+git push
 ```
 
 `.env` ファイルは `.gitignore` で除外されるため、誤って公開される心配はありません
 (APIキーはSecretsにのみ保存されます)。
 
-### 7. 動作確認(手動実行)
+### 9. 動作確認(手動実行)
 
 GitHubのリポジトリページ → **Actions** タブ → 左側から実行したいワークフロー
 (例:「Daily SNS Post」)を選び → 右側の「Run workflow」ボタンを押すと、その場ですぐ実行できます。
-数十秒〜数分後にメールが届けば成功です。失敗した場合はActionsタブの実行ログに詳細が表示されます。
+
+`daily_sns.py` はその場でX・Threadsに実際に投稿されます。テスト実行する際はその点に注意してください。
+数十秒〜数分後に結果報告メールが届けば成功です。失敗した場合はActionsタブの実行ログに詳細が表示されます。
 
 以降は、設定した時刻に自動で実行されます(PCの電源状態に関係なく動きます)。
 
@@ -104,8 +153,13 @@ GitHubのリポジトリページ → **Actions** タブ → 左側から実行�
 
 ## 既知の制約・注意点
 
+- **`daily_sns.py` は完全自動投稿です。** 生成内容に誤りや不適切な表現があっても、そのまま公開されます。
+  結果報告メールで事後確認する運用になるため、違和感のある投稿があれば都度手動で削除・修正してください
+- **Threadsの長期アクセストークンは60日で失効します。** 失効後は再発行してSecretsを更新する必要があります
+- **X APIの無料プランには月間投稿数の上限があります。** 想定投稿量が上限を超えないか、developer.x.comの
+  ダッシュボードで確認してください
 - API利用料はご自身のクレジットカードに課金されます。想定外の頻度で実行されていないか、
   たまにGitHub ActionsのログとAPIの請求ダッシュボードを確認してください
-- 生成内容は事実確認・表現チェックをしたうえで手動投稿してください(自動投稿はしません)
+- note・Instagramの下書きは、事実確認・表現チェックをしたうえで手動投稿してください(こちらは自動投稿しません)
 - GitHub Actionsの無料枠は、プライベートリポジトリで月2,000分です。このワークフローの実行時間は
   1回数分程度なので、通常の使用では枠を超えることはまずありません
