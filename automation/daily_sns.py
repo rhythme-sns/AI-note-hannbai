@@ -23,9 +23,11 @@ SCHEMA = {
         "thread": {
             "type": "array",
             "items": {"type": "string"},
-            "minItems": 14,
-            "maxItems": 14,
-            "description": "14ツイート構成のスレッド。各要素が1ツイート分の本文(140字程度)。番号(1/14など)は含めない",
+            "description": (
+                "14ツイート構成のスレッド。必ずちょうど14個の文字列を入れること"
+                "(多くても少なくてもいけない)。各要素が1ツイート分の本文(140字程度)。"
+                "番号(1/14など)は含めない"
+            ),
         },
     },
     "required": ["single_post", "thread"],
@@ -71,6 +73,12 @@ def main() -> None:
     results: list[str] = []
     errors: list[str] = []
 
+    if len(thread) != 14:
+        results.append(
+            f"⚠ スレッドが14件ちょうどではなく{len(thread)}件生成されました(そのまま投稿します)"
+        )
+        thread = thread[:14]  # 多すぎる場合のみ安全のため切り詰める
+
     try:
         x_single_ids = post_thread_to_x([single_post])
         x_thread_ids = post_thread_to_x(thread)
@@ -90,14 +98,15 @@ def main() -> None:
         errors.append(f"Threads投稿でエラー: {type(e).__name__}: {e}")
 
     status = "✅ 自動投稿 完了" if not errors else "⚠ 自動投稿 一部エラーあり"
-    thread_text = "\n\n".join(f"{i + 1}/14: {t}" for i, t in enumerate(thread))
+    total = len(thread)
+    thread_text = "\n\n".join(f"{i + 1}/{total}: {t}" for i, t in enumerate(thread))
 
     body = f"""{status}
 
 【単発ポスト】
 {single_post}
 
-【スレッド(14ツイート)】
+【スレッド({total}ツイート)】
 {thread_text}
 
 【結果】
