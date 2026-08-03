@@ -3,3 +3,4 @@ automation/outputs/
 automation/run_log.txt
 __pycache__/
 *.pyc
+screenshots/
