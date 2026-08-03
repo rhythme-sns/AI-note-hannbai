@@ -2,7 +2,7 @@ name: Daily Instagram Post
 
 on:
   schedule:
-    - cron: "0 23 * * *"   # 毎日 8:00 JST (前日23:00 UTC)
+    - cron: "3 23 * * *"   # 毎日 8:03 JST(ちょうど8:00ではなく、アクセス集中を避けるため数分ずらす)
   workflow_dispatch: {}
 
 jobs:
