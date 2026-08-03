@@ -50,8 +50,24 @@ Instagram用の正方形(1080x1080)情報グラフィック画像を生成する
 """
     text = generate_with_search(prompt, max_tokens=2000)
 
-    image_prompt = text.split("## CAPTION")[0].replace("## IMAGE_PROMPT", "").strip()
-    caption = text.split("## CAPTION")[1].strip() if "## CAPTION" in text else text
+    if "## IMAGE_PROMPT" in text and "## CAPTION" in text:
+        # web_search利用時にClaudeが前置きの説明文を挟むことがあるため、
+        # マーカーの"間"だけを厳密に取り出す(前置き文が紛れ込むのを防ぐ)
+        image_prompt = text.split("## IMAGE_PROMPT", 1)[1].split("## CAPTION", 1)[0].strip()
+        caption = text.split("## CAPTION", 1)[1].strip()
+    else:
+        # フォーマットが崩れた場合のフォールバック(画像生成が失敗しないようにする)
+        print("⚠ 出力フォーマットが期待通りではありませんでした。フォールバックのプロンプトを使用します。")
+        print("=== Claudeの生出力 ===")
+        print(text)
+        image_prompt = (
+            "Minimalist Instagram square infographic, deep indigo to violet to black gradient, "
+            "glowing light particles, elegant premium tone, no sci-fi or robot cliches, no readable text."
+        )
+        caption = text.strip()
+
+    # OpenAI側の上限に余裕を持たせて安全に切り詰める
+    image_prompt = image_prompt[:3500]
 
     return image_prompt, caption
 
@@ -70,6 +86,12 @@ def generate_image(image_prompt: str) -> Path:
         },
         timeout=120,
     )
+    if resp.status_code != 200:
+        print("=== OpenAI APIエラーの詳細 ===")
+        print(f"status_code: {resp.status_code}")
+        print(resp.text)
+        print("=== 送信した画像プロンプト ===")
+        print(image_prompt)
     resp.raise_for_status()
     b64 = resp.json()["data"][0]["b64_json"]
     out_path = OUTPUT_DIR / f"instagram_{datetime.date.today()}.png"
