@@ -1,3 +1,4 @@
+import os
 import sys
 import datetime
 
@@ -5,6 +6,7 @@ from common import generate_structured_with_search, send_mail, BRAND_CONTEXT
 from social_post import post_thread_to_x, post_thread_to_threads
 
 NOTE_URL = "https://note.com/sakaki_ai"
+DRY_RUN = os.environ.get("DRY_RUN", "false").lower() == "true"
 
 BASE_PATTERNS = {
     0: "問いかけ型(読者の疑問を刺激する)",
@@ -83,19 +85,22 @@ def main() -> None:
     results: list[str] = []
     errors: list[str] = []
 
-    try:
-        ids = post_thread_to_x([x_post])
-        results.append(f"X: 単発ポスト(id={ids[0]})を投稿しました")
-    except Exception as e:  # noqa: BLE001
-        errors.append(f"X投稿でエラー: {type(e).__name__}: {e}")
+    if DRY_RUN:
+        results.append("🧪 DRY RUN: 実際の投稿はスキップしました(生成内容のみ確認できます)")
+    else:
+        try:
+            ids = post_thread_to_x([x_post])
+            results.append(f"X: 単発ポスト(id={ids[0]})を投稿しました")
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"X投稿でエラー: {type(e).__name__}: {e}")
 
-    try:
-        ids = post_thread_to_threads([threads_post])
-        results.append(f"Threads: 単発ポスト(id={ids[0]})を投稿しました")
-    except Exception as e:  # noqa: BLE001
-        errors.append(f"Threads投稿でエラー: {type(e).__name__}: {e}")
+        try:
+            ids = post_thread_to_threads([threads_post])
+            results.append(f"Threads: 単発ポスト(id={ids[0]})を投稿しました")
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"Threads投稿でエラー: {type(e).__name__}: {e}")
 
-    status = "✅ 自動投稿 完了" if not errors else "⚠ 自動投稿 一部エラーあり"
+    status = "🧪 DRY RUN 完了" if DRY_RUN else ("✅ 自動投稿 完了" if not errors else "⚠ 自動投稿 一部エラーあり")
     body = f"""{status}
 
 【X 単発ポスト({slot_label})】
@@ -107,8 +112,9 @@ def main() -> None:
 【結果】
 {chr(10).join(results + errors)}
 """
+    subject_prefix = "【DRY RUN】" if DRY_RUN else "【本質のAI活用術】"
     send_mail(
-        f"【本質のAI活用術】{slot_label}の単発ポスト自動投稿結果 ({datetime.date.today()})",
+        f"{subject_prefix}{slot_label}の単発ポスト自動投稿結果 ({datetime.date.today()})",
         body,
     )
 

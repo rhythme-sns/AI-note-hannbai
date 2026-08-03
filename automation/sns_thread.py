@@ -1,3 +1,4 @@
+import os
 import datetime
 
 from common import generate_structured_with_search, send_mail, BRAND_CONTEXT
@@ -5,6 +6,7 @@ from social_post import post_thread_to_x, post_thread_to_threads
 
 NOTE_URL = "https://note.com/sakaki_ai"
 THREAD_LENGTH = 5
+DRY_RUN = os.environ.get("DRY_RUN", "false").lower() == "true"
 
 SCHEMA = {
     "type": "object",
@@ -79,19 +81,22 @@ def main() -> None:
         )
         threads_thread = threads_thread[:THREAD_LENGTH]
 
-    try:
-        ids = post_thread_to_x(x_thread)
-        results.append(f"X: スレッド{len(ids)}件を投稿しました")
-    except Exception as e:  # noqa: BLE001
-        errors.append(f"X投稿でエラー: {type(e).__name__}: {e}")
+    if DRY_RUN:
+        results.append("🧪 DRY RUN: 実際の投稿はスキップしました(生成内容のみ確認できます)")
+    else:
+        try:
+            ids = post_thread_to_x(x_thread)
+            results.append(f"X: スレッド{len(ids)}件を投稿しました")
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"X投稿でエラー: {type(e).__name__}: {e}")
 
-    try:
-        ids = post_thread_to_threads(threads_thread)
-        results.append(f"Threads: スレッド{len(ids)}件を投稿しました")
-    except Exception as e:  # noqa: BLE001
-        errors.append(f"Threads投稿でエラー: {type(e).__name__}: {e}")
+        try:
+            ids = post_thread_to_threads(threads_thread)
+            results.append(f"Threads: スレッド{len(ids)}件を投稿しました")
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"Threads投稿でエラー: {type(e).__name__}: {e}")
 
-    status = "✅ 自動投稿 完了" if not errors else "⚠ 自動投稿 一部エラーあり"
+    status = "🧪 DRY RUN 完了" if DRY_RUN else ("✅ 自動投稿 完了" if not errors else "⚠ 自動投稿 一部エラーあり")
     x_text = "\n\n".join(f"{i + 1}/{len(x_thread)}: {t}" for i, t in enumerate(x_thread))
     th_text = "\n\n".join(
         f"{i + 1}/{len(threads_thread)}: {t}" for i, t in enumerate(threads_thread)
@@ -108,7 +113,8 @@ def main() -> None:
 【結果】
 {chr(10).join(results + errors)}
 """
-    send_mail(f"【本質のAI活用術】お昼のスレッド自動投稿結果 ({datetime.date.today()})", body)
+    subject_prefix = "【DRY RUN】" if DRY_RUN else "【本質のAI活用術】"
+    send_mail(f"{subject_prefix}お昼のスレッド自動投稿結果 ({datetime.date.today()})", body)
 
     if errors:
         raise RuntimeError("; ".join(errors))

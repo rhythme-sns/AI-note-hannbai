@@ -3,7 +3,12 @@ name: SNS Morning Single Post
 on:
   schedule:
     - cron: "7 23 * * *"   # 毎日 8:07 JST(ちょうど8:00ではなく、アクセス集中を避けるため数分ずらす)
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "true にすると実際には投稿せず、生成内容だけメールで確認できます"
+        type: boolean
+        default: false
 
 jobs:
   run:
@@ -16,6 +21,7 @@ jobs:
       - run: pip install -r automation/requirements.txt
       - run: python automation/sns_single_post.py morning
         env:
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
