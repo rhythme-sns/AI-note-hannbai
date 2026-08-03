@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__claude_ai_Gmail__list_labels",
+      "mcp__claude_ai_Gmail__search_threads",
+      "Skill(schedule)",
+      "Bash(python3 -c \"import uuid; print\\(uuid.uuid4\\(\\)\\); print\\(uuid.uuid4\\(\\)\\)\")",
+      "Bash(node -e \"const {randomUUID}=require\\('crypto'\\); console.log\\(randomUUID\\(\\)\\); console.log\\(randomUUID\\(\\)\\);\")",
+      "mcp__claude_ai_Canva__generate-design",
+      "mcp__claude_ai_Canva__create-design-from-candidate",
+      "mcp__claude_ai_Canva__read-design",
+      "mcp__claude_ai_Canva__edit-design",
+      "mcp__claude_ai_Windsor_ai__get_connectors",
+      "Bash(python3 -c \"import uuid; print\\(uuid.uuid4\\(\\)\\)\")",
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomUUID\\(\\)\\)\")",
+      "mcp__claude_ai_Gmail__list_drafts",
+      "Skill(claude-api)",
+      "Bash(gh --version)",
+      "Bash(gh auth *)",
+      "Bash(git --version)"
+    ]
+  }
+}

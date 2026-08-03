@@ -1,0 +1,50 @@
+import datetime
+from common import generate_with_search, send_mail, BRAND_CONTEXT
+
+WEEKDAY_PATTERNS = {
+    0: "問いかけ型(読者の疑問を刺激する)",
+    1: "断定型(核心を言い切る)",
+    2: "体験談型(実務エピソードを想起させる。具体的すぎる作り話の数字は書かない)",
+    3: "悩み共感型(読者のあるあるに寄り添う)",
+    4: "数字型(分身メソッドの4ステップなど構造を見せる)",
+    5: "フック重視型(スレッドの1ツイート目のような強い一文)",
+    6: "自由選択(その週で最も反応が良さそうな型)",
+}
+
+
+def main() -> None:
+    weekday = datetime.datetime.now().weekday()  # 0=Mon ... 6=Sun
+    pattern = WEEKDAY_PATTERNS[weekday]
+
+    prompt = f"""あなたは「本質のAI活用術」の集客を担当するSNSマーケターです。
+
+{BRAND_CONTEXT}
+
+# リサーチ
+web_searchで、AI活用・生成AI関連で発信しているインフルエンサーが今どんな切り口・フォーマットで投稿しているかを調べてください。
+特定個人を名指しで引用・模倣せず、一般的な傾向として要約し着想に使ってください。
+
+# 今日作成するもの
+
+## ①単発ポスト(1本、140字以内)
+今日のパターン:{pattern}
+文末に `[note URLをここに挿入]` を入れる。ハッシュタグを2〜4個(#本質のAI活用術 を必ず含む)。
+
+## ②スレッド投稿(1本、6〜7ツイート構成)
+1ツイート目で完全に興味を持たせるフック。分身メソッドの考え方を軸に展開。最後にnoteへの誘導とハッシュタグ。
+
+出力は「①」「②」の見出しで分け、Markdown形式で整理してください。
+誇張・釣り表現、実在しない実績数字、特定個人の断定的引用は禁止です。
+"""
+    content = generate_with_search(prompt, max_tokens=3000)
+
+    body = f"""{content}
+
+---
+⚠ これは自動生成された下書きです。内容を確認・必要なら手直しのうえ、ご自身でXに投稿してください。
+"""
+    send_mail(f"【本質のAI活用術】今日のSNS投稿案 ({datetime.date.today()})", body)
+
+
+if __name__ == "__main__":
+    main()
