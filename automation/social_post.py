@@ -1,4 +1,5 @@
 import os
+import time
 
 import requests
 import tweepy
@@ -56,15 +57,34 @@ def _threads_request(path: str, params: dict) -> dict:
     return resp.json()
 
 
+def _publish_with_retry(container_id: str, retries: int = 4, wait_seconds: int = 15) -> dict:
+    """コンテナ作成直後はThreads側でまだ処理中のことがあり、
+    すぐにpublishすると『Media Not Found』になる場合がある。少し待ってリトライする。
+    """
+    last_error: Exception | None = None
+    for attempt in range(retries):
+        try:
+            return _threads_request(
+                f"{THREADS_USER_ID}/threads_publish", {"creation_id": container_id}
+            )
+        except requests.exceptions.HTTPError as e:
+            last_error = e
+            print(f"Threads publishを再試行します({attempt + 1}/{retries}): {e}")
+            time.sleep(wait_seconds)
+    raise last_error
+
+
 def _post_one_to_threads(text: str, reply_to_id: str | None = None) -> str:
     params = {"media_type": "TEXT", "text": text}
     if reply_to_id:
         params["reply_to_id"] = reply_to_id
     container = _threads_request(f"{THREADS_USER_ID}/threads", params)
     container_id = container["id"]
-    published = _threads_request(
-        f"{THREADS_USER_ID}/threads_publish", {"creation_id": container_id}
-    )
+
+    # コンテナ作成直後はThreads側の処理待ちが必要なため、少し間を置く
+    time.sleep(10)
+
+    published = _publish_with_retry(container_id)
     return str(published["id"])
 
 
