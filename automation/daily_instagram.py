@@ -82,7 +82,6 @@ def generate_image(image_prompt: str) -> Path:
             "size": "1024x1024",
             "quality": "hd",
             "n": 1,
-            "response_format": "b64_json",
         },
         timeout=120,
     )
@@ -93,9 +92,17 @@ def generate_image(image_prompt: str) -> Path:
         print("=== 送信した画像プロンプト ===")
         print(image_prompt)
     resp.raise_for_status()
-    b64 = resp.json()["data"][0]["b64_json"]
+    data = resp.json()["data"][0]
     out_path = OUTPUT_DIR / f"instagram_{datetime.date.today()}.png"
-    out_path.write_bytes(base64.b64decode(b64))
+
+    if "b64_json" in data:
+        out_path.write_bytes(base64.b64decode(data["b64_json"]))
+    else:
+        # response_formatを指定しないとURL形式で返ってくる場合がある
+        img_resp = requests.get(data["url"], timeout=60)
+        img_resp.raise_for_status()
+        out_path.write_bytes(img_resp.content)
+
     return out_path
 
 
