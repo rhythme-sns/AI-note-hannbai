@@ -1,8 +1,8 @@
-name: Daily SNS Post
+name: SNS Midday Thread
 
 on:
   schedule:
-    - cron: "0 0 * * *"   # 毎日 9:00 JST
+    - cron: "12 3 * * *"   # 毎日 12:12 JST(ちょうど12:00ではなく、アクセス集中を避けるため数分ずらす)
   workflow_dispatch: {}
 
 jobs:
@@ -14,7 +14,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r automation/requirements.txt
-      - run: python automation/daily_sns.py
+      - run: python automation/sns_thread.py
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
