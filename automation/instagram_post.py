@@ -4,9 +4,14 @@ import time
 
 import requests
 
+def _clean_secret(value: str) -> str:
+    """GitHub SecretsへのコピペでありがちなJSON引用符・前後の空白/改行の混入を取り除く。"""
+    return value.strip().strip('"').strip("'").strip()
+
+
 IG_API_BASE = "https://graph.facebook.com/v21.0"
-IG_USER_ID = os.environ["IG_USER_ID"]
-IG_ACCESS_TOKEN = os.environ["IG_ACCESS_TOKEN"]
+IG_USER_ID = _clean_secret(os.environ["IG_USER_ID"])
+IG_ACCESS_TOKEN = _clean_secret(os.environ["IG_ACCESS_TOKEN"])
 
 
 def _ig_request(method: str, path: str, **params) -> dict:
