@@ -14,12 +14,11 @@ def _clean_secret(value: str) -> str:
     return re.sub(r"\s+", "", value)
 
 
-IG_API_BASE = "https://graph.facebook.com/v21.0"
+# "Instagram API with Instagram Login"(トークンがIGAAで始まり、IDが英数字)用のエンドポイント。
+# Facebookページ経由の旧方式(トークンがEAAで始まり、IDが数字のみ)とはホストが異なるので注意。
+IG_API_BASE = "https://graph.instagram.com/v21.0"
 IG_USER_ID = _clean_secret(os.environ["IG_USER_ID"])
 IG_ACCESS_TOKEN = _clean_secret(os.environ["IG_ACCESS_TOKEN"])
-
-print(f"[debug] IG_USER_ID length={len(IG_USER_ID)} preview={IG_USER_ID[:4]}...{IG_USER_ID[-4:] if len(IG_USER_ID) >= 4 else ''}")
-print(f"[debug] IG_ACCESS_TOKEN length={len(IG_ACCESS_TOKEN)} preview={IG_ACCESS_TOKEN[:6]}...{IG_ACCESS_TOKEN[-4:] if len(IG_ACCESS_TOKEN) >= 4 else ''}")
 
 
 def _ig_request(method: str, path: str, **params) -> dict:

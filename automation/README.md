@@ -92,32 +92,38 @@ GitHub Actions(クラウド)上で動くPythonスクリプトです。**PCの電
 > ⚠ **長期トークンは60日で失効します。** 失効するとThreads投稿だけがエラーになります(Xやnote/Instagramは影響を受けません)。
 > 60日ごとに上記6の交換URLを再度実行してSecretsを更新するか、失効前にリマインダーを設定しておくことをおすすめします。
 
-### 6. Instagram Graph APIキーの取得(リール自動投稿用)
+### 6. Instagram APIキーの取得(リール自動投稿用)
 
-投稿先の「サカキ」用Instagramアカウント(Threadsと同じ、Facebookページに連携されたプロフェッショナルアカウントである必要があります)で進めてください。
+投稿先の「サカキ」用Instagramアカウント(プロフェッショナルアカウントである必要があります)で進めてください。
 手順5でThreads用に作成したアプリをそのまま使えます。
 
-1. developers.facebook.comのアプリのダッシュボードで **製品を追加** から「Instagram Graph API」(または「Instagram」)を追加する
-2. **Graph API Explorer**(https://developers.facebook.com/tools/explorer/)を開き、作成したアプリを選択→
-   対象のFacebookページ管理者としてアクセストークンを発行する
-   (`instagram_basic`, `instagram_content_publish`, `pages_show_list`, `pages_read_engagement` の権限を付与)
-3. 発行された短期トークンを、長期(60日)トークンに交換する(以下のURLをブラウザで開く。
-   `{app-id}` `{app-secret}` `{short-lived-token}` は実際の値に置き換える):
+このプロジェクトは **「Instagram API with Instagram Login」**(Facebookページを介さない新しい方式)を使用します。
+アクセストークンは `IGAA` から始まり、`IG_USER_ID` は数字だけでなく英数字混じりになります(旧方式の `EAA` トークン・数字のみのIDとは別物なので、間違えないよう注意してください)。
+
+1. developers.facebook.comのアプリのダッシュボードで **製品を追加** から「Instagram」を追加する
+2. 左メニューの **Instagram → API setup with Instagram Login** を開く
+3. 「Add account」的な手順で、投稿対象のInstagramプロフェッショナルアカウントをテスターとして追加し、Instagram側で連携を承認する
+4. 同じ画面(または「Generate token」ボタン)から、そのアカウント用のアクセストークンを発行する
+   (`instagram_business_basic`, `instagram_business_content_publish` の権限が含まれていることを確認)
+5. 同じ画面に表示される **Instagram User ID** をそのまま控える → これが `IG_USER_ID` です
+6. 発行されたトークンを、長期(60日)トークンに交換する(ブラウザで以下を開く。
+   `{app-secret}` はアプリの「設定→ベーシック」、`{short-lived-token}` は手順4のトークンに置き換える):
    ```
-   https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id={app-id}&client_secret={app-secret}&fb_exchange_token={short-lived-token}
+   https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret={app-secret}&access_token={short-lived-token}
    ```
-   返ってきたJSONの `access_token` が `IG_ACCESS_TOKEN` です
-4. 連携しているFacebookページIDを確認する:
-   ```
-   https://graph.facebook.com/v21.0/me/accounts?access_token={long-lived-token}
-   ```
-5. そのページIDから、投稿対象の `IG_USER_ID`(Instagramビジネスアカウント ID)を確認する:
-   ```
-   https://graph.facebook.com/v21.0/{page-id}?fields=instagram_business_account&access_token={long-lived-token}
-   ```
+   返ってきたJSONの `access_token` の値だけ(引用符・前後の`{}`は含めない)が `IG_ACCESS_TOKEN` です
 
 > ⚠ **長期トークンは60日で失効します。** 失効するとInstagram投稿だけがエラーになります(X・Threads・noteは影響を受けません)。
-> 60日ごとに上記3の交換URLを再度実行してSecretsを更新するか、失効前にリマインダーを設定しておくことをおすすめします。
+> 失効前に、以下のURLで更新できます(`{long-lived-token}` を現在のトークンに置き換える。実行すると新しいトークンが返るので、Secretsを更新する):
+> ```
+> https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token={long-lived-token}
+> ```
+> 60日ごとにこれを実行してSecretsを更新するか、失効前にリマインダーを設定しておくことをおすすめします。
+
+> 🔍 トークンが正しく動くか事前に確認したい場合は、ブラウザで以下を開いてアカウント情報が返ってくるか確認できます:
+> ```
+> https://graph.instagram.com/v21.0/me?access_token={token}
+> ```
 
 ### 7. リール動画配信用のPublicリポジトリとPATを用意する
 
@@ -162,8 +168,8 @@ Instagram Graph APIは、動画を「認証なしでアクセスできる公開U
 | `X_ACCESS_TOKEN_SECRET` | Xの Access Token Secret |
 | `THREADS_USER_ID` | ThreadsユーザーID |
 | `THREADS_ACCESS_TOKEN` | Threads長期アクセストークン |
-| `IG_USER_ID` | Instagramビジネスアカウント ID |
-| `IG_ACCESS_TOKEN` | Instagram長期アクセストークン |
+| `IG_USER_ID` | Instagram User ID(手順6の英数字ID) |
+| `IG_ACCESS_TOKEN` | Instagram長期アクセストークン(`IGAA`から始まる) |
 | `MEDIA_REPO` | `あなたのGitHubユーザー名/ai-note-reels-media` |
 | `MEDIA_REPO_TOKEN` | 手順7で発行したFine-grained PAT(`github_pat_...`) |
 
