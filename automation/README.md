@@ -11,13 +11,18 @@ GitHub Actions(クラウド)上で動くPythonスクリプトです。**PCの電
 | `sns_thread.py` | 同様にリサーチし、5投稿構成のスレッドを生成して**XとThreadsに自動投稿**する(お昼用) | X・Threadsに自動投稿 + 結果報告メール | 毎日 12:12 JST |
 | `sns_single_post.py evening` | 朝とは型をずらした単発ポストを生成して**XとThreadsに自動投稿**する(夜用) | X・Threadsに自動投稿 + 結果報告メール | 毎日 20:20 JST |
 | `weekly_note.py` | 似た発信者をリサーチし、まだ扱っていない新テーマを自分で提案してnote新作(企画〜集客文まで)を作成。扱ったテーマは `themes_log.json` に記録し、二度と同じテーマを提案しない | メール(下書き、要手動投稿) | 毎週月曜 9:15 JST |
-| `daily_instagram.py` | Instagram用画像(OpenAIで生成、クリエイター/デザイナー風の情景をランダム生成)+キャプションを作成 | メール(下書き、添付ファイルあり、要手動投稿) | 毎日 8:00 JST |
+| `daily_instagram.py` | Instagramリール用の縦型動画(OpenAIで生成した画像をffmpegでKen Burns風にアニメーション化+ローテーションBGM)+キャプションを作成し、**Instagramに自動投稿**する | Instagramに自動投稿 + 結果報告メール | 毎日 8:03 JST |
 
-> ⚠ **SNS(X・Threads)の3本(朝の単発/お昼のスレッド/夜の単発)は完全自動投稿です。**人の確認を挟まず、
-> 生成された内容がそのままX・Threadsに公開されます。それぞれ独立して実行されるため、朝と夜の単発ポストは
+> ⚠ **SNS(X・Threads・Instagram)の4本(朝の単発/お昼のスレッド/夜の単発/Instagramリール)は完全自動投稿です。**
+> 人の確認を挟まず、生成された内容がそのままX・Threads・Instagramに公開されます。それぞれ独立して実行されるため、朝と夜の単発ポストは
 > 内容の切り口をずらして生成し、単純な繰り返しにならないようにしています。
 > 実行時刻は、GitHub Actionsで多くのワークフローが集中しがちな「ちょうど◯時」を避け、数分ずらしてあります。
-> note・Instagramは引き続き下書きメールのみで、実際の投稿はご自身で行ってください。
+> noteは引き続き下書きメールのみで、実際の投稿はご自身で行ってください。
+
+> 🎵 **Instagramリールの背景音楽(BGM)について**: 著作権のある実在の楽曲ファイルを自動で組み込むことはできないため、
+> ffmpegで「落ち着いたリズムのアンビエント音」を3パターン数学的に合成し、日付でローテーションしています
+> (`automation/reels_media.py` の `AMBIENT_PRESETS`)。実在の楽曲ではなく、著作権フリーの生成音です。
+> 実在の楽曲を使いたい場合は、別途mp3ファイルを用意しコードを差し替える必要があります。
 
 ---
 
@@ -87,13 +92,59 @@ GitHub Actions(クラウド)上で動くPythonスクリプトです。**PCの電
 > ⚠ **長期トークンは60日で失効します。** 失効するとThreads投稿だけがエラーになります(Xやnote/Instagramは影響を受けません)。
 > 60日ごとに上記6の交換URLを再度実行してSecretsを更新するか、失効前にリマインダーを設定しておくことをおすすめします。
 
-### 6. GitHubリポジトリを作る
+### 6. Instagram Graph APIキーの取得(リール自動投稿用)
+
+投稿先の「サカキ」用Instagramアカウント(Threadsと同じ、Facebookページに連携されたプロフェッショナルアカウントである必要があります)で進めてください。
+手順5でThreads用に作成したアプリをそのまま使えます。
+
+1. developers.facebook.comのアプリのダッシュボードで **製品を追加** から「Instagram Graph API」(または「Instagram」)を追加する
+2. **Graph API Explorer**(https://developers.facebook.com/tools/explorer/)を開き、作成したアプリを選択→
+   対象のFacebookページ管理者としてアクセストークンを発行する
+   (`instagram_basic`, `instagram_content_publish`, `pages_show_list`, `pages_read_engagement` の権限を付与)
+3. 発行された短期トークンを、長期(60日)トークンに交換する(以下のURLをブラウザで開く。
+   `{app-id}` `{app-secret}` `{short-lived-token}` は実際の値に置き換える):
+   ```
+   https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id={app-id}&client_secret={app-secret}&fb_exchange_token={short-lived-token}
+   ```
+   返ってきたJSONの `access_token` が `IG_ACCESS_TOKEN` です
+4. 連携しているFacebookページIDを確認する:
+   ```
+   https://graph.facebook.com/v21.0/me/accounts?access_token={long-lived-token}
+   ```
+5. そのページIDから、投稿対象の `IG_USER_ID`(Instagramビジネスアカウント ID)を確認する:
+   ```
+   https://graph.facebook.com/v21.0/{page-id}?fields=instagram_business_account&access_token={long-lived-token}
+   ```
+
+> ⚠ **長期トークンは60日で失効します。** 失効するとInstagram投稿だけがエラーになります(X・Threads・noteは影響を受けません)。
+> 60日ごとに上記3の交換URLを再度実行してSecretsを更新するか、失効前にリマインダーを設定しておくことをおすすめします。
+
+### 7. リール動画配信用のPublicリポジトリとPATを用意する
+
+Instagram Graph APIは、動画を「認証なしでアクセスできる公開URL」からしか取得できません。
+この自動化リポジトリ(企画書・販売ページ等の事業内容を含む)は非公開のままにしたいため、
+**動画ファイルだけを置く、中身が空の新しいPublicリポジトリ**を別途1つ作成します。
+
+1. https://github.com/new を開き、リポジトリ名を決める(例:`ai-note-reels-media`)、**Public** を選択して「Create repository」
+   (「Add a README file」にチェックを入れて初回コミットを作っておくと、後の手順がスムーズです)
+2. https://github.com/settings/tokens?type=beta を開き、**Generate new token** から Fine-grained
+   personal access tokenを作成する
+   - Repository access: 「Only select repositories」→ 手順1で作った `ai-note-reels-media` のみを選択
+   - Permissions: **Contents** を **Read and write** に設定
+   - 有効期限は任意(期限切れ後は投稿がエラーになるため、長め+再発行のリマインダーを推奨)
+3. 発行されたトークン(`github_pat_...`)を控える。これが `MEDIA_REPO_TOKEN` です
+4. `MEDIA_REPO` には `あなたのGitHubユーザー名/ai-note-reels-media` の形式で控えておく
+
+> ⚠ このリポジトリは**誰でも中身(投稿済みの動画ファイル)が見られる状態**になります。
+> 動画は投稿のたびに古いものを削除して1本だけ残す運用にしていますが、動画自体の内容は公開される前提で扱ってください。
+
+### 8. GitHubリポジトリを作る(メインの自動化リポジトリ)
 
 1. https://github.com/new を開く
 2. リポジトリ名を決める、**Private** を選択して「Create repository」
 3. 作成後に表示されるリモートURLを控えておく
 
-### 7. Secrets(暗号化された環境変数)を登録する
+### 9. Secrets(暗号化された環境変数)を登録する
 
 作成したリポジトリの **Settings → Secrets and variables → Actions → New repository secret** から、
 以下をそれぞれ登録してください(値は前の手順で控えたもの):
@@ -111,30 +162,36 @@ GitHub Actions(クラウド)上で動くPythonスクリプトです。**PCの電
 | `X_ACCESS_TOKEN_SECRET` | Xの Access Token Secret |
 | `THREADS_USER_ID` | ThreadsユーザーID |
 | `THREADS_ACCESS_TOKEN` | Threads長期アクセストークン |
+| `IG_USER_ID` | Instagramビジネスアカウント ID |
+| `IG_ACCESS_TOKEN` | Instagram長期アクセストークン |
+| `MEDIA_REPO` | `あなたのGitHubユーザー名/ai-note-reels-media` |
+| `MEDIA_REPO_TOKEN` | 手順7で発行したFine-grained PAT(`github_pat_...`) |
 
-### 8. このフォルダをGitHubにpushする
+### 10. このフォルダをGitHubにpushする
 
 このプロジェクトフォルダ(`notehannbai2`)のルートで実行してください(すでにpush済みの場合は不要です)。
 
 ```bash
 cd "C:\Users\reon2\OneDrive\デスクトップ\notehannbai2"
 git add .
-git commit -m "X/Threads自動投稿対応"
+git commit -m "Instagramリール自動投稿対応"
 git push
 ```
 
 `.env` ファイルは `.gitignore` で除外されるため、誤って公開される心配はありません
 (APIキーはSecretsにのみ保存されます)。
 
-### 9. 動作確認(手動実行)
+### 11. 動作確認(手動実行)
 
 GitHubのリポジトリページ → **Actions** タブ → 左側から実行したいワークフロー
 (例:「SNS Morning Single Post」)を選び → 右側の「Run workflow」ボタンを押すと、その場ですぐ実行できます。
 
-SNS系の3つ(`SNS Morning Single Post` / `SNS Midday Thread` / `SNS Evening Single Post`)は、
+自動投稿系の4つ(`SNS Morning Single Post` / `SNS Midday Thread` / `SNS Evening Single Post` / `Daily Instagram Reel Post`)は、
 「Run workflow」を押すと **`dry_run`** というチェックボックスが表示されます。
-これに ✅ を入れて実行すると、**実際にはX・Threadsに投稿せず、生成内容だけをメールで確認**できます。
+これに ✅ を入れて実行すると、**実際にはX・Threads・Instagramに投稿せず、生成内容だけをメールで確認**できます。
 チェックを外す(またはスケジュール実行)と通常通り本番投稿されます。
+特にInstagramリールは初回、必ず `dry_run` ✅ で一度動かし、動画やキャプションの仕上がりを確認してから
+本番投稿(チェックなし)に切り替えることを強くおすすめします。
 
 数十秒〜数分後に結果報告メールが届けば成功です(件名が「【DRY RUN】」で始まっていれば投稿はされていません)。
 失敗した場合はActionsタブの実行ログに詳細が表示されます。
@@ -157,19 +214,25 @@ SNS系の3つ(`SNS Morning Single Post` / `SNS Midday Thread` / `SNS Evening Sin
 `run_sns_morning.bat` / `run_sns_thread.bat` / `run_sns_evening.bat` / `run_daily_instagram.bat` / `run_weekly_note.bat` を使えば、
 このPC上でも従来通りタスクスケジューラ経由で実行できます。ただしPCの電源が入っている必要があるため、
 基本的にはGitHub Actions側の実行のみで十分です。ローカル実行する場合は `.env` ファイルを
-`.env.example` を元に作成してください。
+`.env.example` を元に作成してください。`run_daily_instagram.bat` を使う場合は、あらかじめ
+[ffmpeg](https://ffmpeg.org/download.html) をインストールしてPATHを通しておく必要があります
+(動画・BGM生成に使用します。GitHub Actions側は追加設定なしで利用できます)。
 
 ---
 
 ## 既知の制約・注意点
 
-- **SNS系の3つ(朝の単発/お昼のスレッド/夜の単発)は完全自動投稿です。** 生成内容に誤りや不適切な表現があっても、
+- **SNS系の4つ(朝の単発/お昼のスレッド/夜の単発/Instagramリール)は完全自動投稿です。** 生成内容に誤りや不適切な表現があっても、
   そのまま公開されます。結果報告メールで事後確認する運用になるため、違和感のある投稿があれば都度手動で削除・修正してください
-- **Threadsの長期アクセストークンは60日で失効します。** 失効後は再発行してSecretsを更新する必要があります
+- **Threads・Instagramの長期アクセストークンはどちらも60日で失効します。** 失効後は再発行してSecretsを更新する必要があります
 - **X APIの無料プランには月間投稿数の上限があります。** 想定投稿量が上限を超えないか、developer.x.comの
   ダッシュボードで確認してください
+- **Instagramリールの背景音楽は実在の楽曲ではなく、ffmpegで合成したアンビエント音です。** 実在の楽曲を使いたくなった場合は
+  別途mp3ファイルを用意し `reels_media.py` を差し替える必要があります
+- **リール動画は `MEDIA_REPO` で指定したPublicリポジトリに一時的に公開されます。** 投稿のたびに古い動画は削除して
+  1本だけ残す運用ですが、その動画の中身(生成画像・BGM)は誰でも閲覧・ダウンロードできる状態になります
 - API利用料はご自身のクレジットカードに課金されます。想定外の頻度で実行されていないか、
   たまにGitHub ActionsのログとAPIの請求ダッシュボードを確認してください
-- note・Instagramの下書きは、事実確認・表現チェックをしたうえで手動投稿してください(こちらは自動投稿しません)
+- noteの下書きは、事実確認・表現チェックをしたうえで手動投稿してください(こちらは自動投稿しません)
 - GitHub Actionsの無料枠は、プライベートリポジトリで月2,000分です。このワークフローの実行時間は
   1回数分程度なので、通常の使用では枠を超えることはまずありません

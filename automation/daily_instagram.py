@@ -6,9 +6,16 @@ from pathlib import Path
 
 import requests
 
-from common import generate_with_search, send_mail, BRAND_CONTEXT
+from common import generate_structured_with_search, send_mail, BRAND_CONTEXT
+from reels_media import generate_ambient_track, build_reel_video
+from media_repo import push_video_and_get_url
+from instagram_post import post_reel_to_instagram
 
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+NOTE_URL = "https://note.com/sakaki_ai"
+DRY_RUN = os.environ.get("DRY_RUN", "false").lower() == "true"
+REEL_DURATION_SECONDS = 18
+
 OUTPUT_DIR = Path(__file__).parent / "outputs"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
@@ -51,24 +58,50 @@ BUNSHIN_ACCENTS = [
     "画面に映るもう一つの淡い人影が、本人と同じ姿勢でタイピングしている",
 ]
 
+# 投稿の締めに毎回必ず入れる、フォロー・いいね・保存の訴求とnoteへの誘導(内容はコード側で固定し、生成任せにしない)
+CLOSING_CTA = (
+    "━━━━━━━━━\n"
+    "📌 保存しておくと、あとで見返せます\n"
+    "❤️ 参考になったら「いいね」で教えてください\n"
+    "🔔 明日以降の投稿も見逃したくない方はフォローしてお待ちください\n\n"
+    "▶ もっと詳しく知りたい方はこちら\n"
+    f"{NOTE_URL}"
+)
 
-def generate_image_prompt_and_caption() -> tuple[str, str]:
-    weekday = datetime.datetime.now().weekday()
-    angle = WEEKDAY_ANGLES[weekday]
+SCHEMA = {
+    "type": "object",
+    "properties": {
+        "image_prompt": {
+            "type": "string",
+            "description": "Instagramリール用の縦長(9:16)画像を生成するための英語の画像生成プロンプト",
+        },
+        "caption_body": {
+            "type": "string",
+            "description": (
+                "日本語のキャプション本文。共感導入文→分身メソッドの考え方に軽く触れる、という流れ。"
+                "CTA(フォロー・いいね・保存を促す文言)やnoteのURL、ハッシュタグはここに含めないこと"
+                "(それらは別途固定で付加される)"
+            ),
+        },
+        "hashtags": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "5〜8個。それぞれ先頭に#を付けること。#本質のAI活用術 を必ず含む",
+        },
+    },
+    "required": ["image_prompt", "caption_body", "hashtags"],
+    "additionalProperties": False,
+}
 
-    scene_angle = random.choice(CAMERA_ANGLES)
-    scene_time = random.choice(TIME_OF_DAY)
-    scene_workspace = random.choice(WORKSPACE_STYLES)
-    scene_accent = random.choice(BUNSHIN_ACCENTS)
 
-    prompt = f"""あなたは「本質のAI活用術」のInstagram投稿を担当するエージェントです。
+def build_prompt(angle: str, scene_angle: str, scene_time: str, scene_workspace: str, scene_accent: str) -> str:
+    return f"""あなたは「本質のAI活用術」のInstagramリール投稿を担当するエージェントです。
 
 {BRAND_CONTEXT}
 
 # リサーチ
 web_searchで、AI活用系のインフルエンサーが「AIのメリット」についてどんな切り口で語っているかを調べてください。
 特定個人を名指しで引用せず、一般的傾向として要約し着想に使ってください。
-リサーチ結果の説明は簡潔にまとめ、下の出力を省略せず最後まで書き切ってください。
 
 # 今日の角度
 {angle}
@@ -79,44 +112,43 @@ web_searchで、AI活用系のインフルエンサーが「AIのメリット」
 - ワークスペースの雰囲気:{scene_workspace}
 - 「分身」を感じさせる演出:{scene_accent}
 
-# 出力(必ずこの2つの見出しで分けて出力する)
-
-## IMAGE_PROMPT
-Instagram用の正方形(1080x1080)画像を生成するための、英語の画像生成プロンプトを1つ書いてください。
+# image_promptの要件
+Instagramリール(縦型9:16、動画の1枚絵ベースになる)用の画像を生成するための、英語の画像生成プロンプトを1つ書いてください。
 クリエイター・デザイナーがおしゃれなワークスペースでPC作業をしている情景を、写実的で温かみのある高級感のあるトーンで描いてください。
 人物は後ろ姿・手元・シルエットなど「顔がはっきり写らない」構図にする。上記の情景設定(アングル・時間帯・ワークスペース・分身演出)を必ず具体的に反映すること。
+縦長フレームの左右端は動画化の際に軽くクロップされる可能性があるため、主要な被写体は画面中央に収めること。
 ブランドカラー(ネイビー〜バイオレット系の差し色)をどこかに感じさせつつ、サイバーロボット感・ネオン感は避ける。
 今日の角度「{angle}」を表す短い日本語の見出しコピー(1行)を画像内に入れる指示も含めてください。テキストは詰め込みすぎない。
 
-## CAPTION
-日本語のキャプション文。リサーチで見えた一般的傾向を踏まえた共感導入文→分身メソッドの考え方に軽く触れる→ハッシュタグ5〜8個(#本質のAI活用術 を必ず含む)。
-実在しない実績数字は書かない。
+# caption_bodyとhashtagsの要件
+リサーチで見えた一般的傾向を踏まえた共感導入文→分身メソッドの考え方に軽く触れる、という流れの本文を書いてください。
+実在しない実績数字は書かない。CTAやURL、ハッシュタグはcaption_bodyに含めないこと。
 """
-    text = generate_with_search(prompt, max_tokens=4000)
 
-    if "## IMAGE_PROMPT" in text and "## CAPTION" in text:
-        # web_search利用時にClaudeが前置きの説明文を挟むことがあるため、
-        # マーカーの"間"だけを厳密に取り出す(前置き文が紛れ込むのを防ぐ)
-        image_prompt = text.split("## IMAGE_PROMPT", 1)[1].split("## CAPTION", 1)[0].strip()
-        caption = text.split("## CAPTION", 1)[1].strip()
-    else:
-        # フォーマットが崩れた場合のフォールバック(画像生成が失敗しないようにする)
-        print("⚠ 出力フォーマットが期待通りではありませんでした。フォールバックのプロンプトを使用します。")
-        print("=== Claudeの生出力 ===")
-        print(text)
-        image_prompt = (
-            "A photorealistic, warm and premium Instagram square (1080x1080) photo of a creator/designer "
-            "working at a stylish desk, shot from behind or over the shoulder so the face is not clearly "
-            "visible. Cozy natural lighting, a laptop and coffee cup, plants nearby. A subtle navy-to-violet "
-            "accent color and a faint glowing double-silhouette on the screen suggest an AI 'digital twin' "
-            "assisting them. Avoid neon or sci-fi robot cliches, keep it elegant and editorial."
-        )
-        caption = text.strip()
 
-    # OpenAI側の上限に余裕を持たせて安全に切り詰める
-    image_prompt = image_prompt[:3500]
+def generate_content() -> tuple[str, str]:
+    weekday = datetime.datetime.now().weekday()
+    angle = WEEKDAY_ANGLES[weekday]
 
+    scene_angle = random.choice(CAMERA_ANGLES)
+    scene_time = random.choice(TIME_OF_DAY)
+    scene_workspace = random.choice(WORKSPACE_STYLES)
+    scene_accent = random.choice(BUNSHIN_ACCENTS)
+
+    result = generate_structured_with_search(
+        build_prompt(angle, scene_angle, scene_time, scene_workspace, scene_accent),
+        SCHEMA,
+        max_tokens=3000,
+    )
+
+    image_prompt = result["image_prompt"][:3500]  # OpenAI側の上限に余裕を持たせて安全に切り詰める
+    caption = compose_caption(result["caption_body"], result["hashtags"])
     return image_prompt, caption
+
+
+def compose_caption(caption_body: str, hashtags: list[str]) -> str:
+    tags = " ".join(hashtags)
+    return f"{caption_body.strip()}\n\n{CLOSING_CTA}\n\n{tags}"
 
 
 def generate_image(image_prompt: str) -> Path:
@@ -126,7 +158,7 @@ def generate_image(image_prompt: str) -> Path:
         json={
             "model": "gpt-image-1",
             "prompt": image_prompt,
-            "size": "1024x1024",
+            "size": "1024x1536",  # 縦長。ffmpeg側でリール用の1080x1920にクロップ・アニメーション化する
             "quality": "high",
             "n": 1,
         },
@@ -154,22 +186,59 @@ def generate_image(image_prompt: str) -> Path:
 
 
 def main() -> None:
-    image_prompt, caption = generate_image_prompt_and_caption()
+    image_prompt, caption = generate_content()
     image_path = generate_image(image_prompt)
 
-    body = f"""本文キャプション:
+    # BGMは3種類のアンビエントプリセットを日付でローテーション
+    preset_index = datetime.date.today().toordinal() % 3
+    audio_path = generate_ambient_track(
+        preset_index, REEL_DURATION_SECONDS, OUTPUT_DIR / f"audio_{datetime.date.today()}.wav"
+    )
+    video_path = build_reel_video(
+        image_path, audio_path, OUTPUT_DIR / f"reel_{datetime.date.today()}.mp4",
+        duration=REEL_DURATION_SECONDS,
+    )
 
+    status_lines: list[str] = []
+    error: str | None = None
+
+    if DRY_RUN:
+        status_lines.append("🧪 DRY RUN: 実際の投稿はスキップしました(生成内容のみ確認できます)")
+    else:
+        try:
+            video_url = push_video_and_get_url(video_path, f"instagram_{datetime.date.today()}.mp4")
+            media_id = post_reel_to_instagram(video_url, caption)
+            status_lines.append(f"Instagram: リール投稿(id={media_id})が完了しました")
+        except Exception as e:  # noqa: BLE001
+            error = f"{type(e).__name__}: {e}"
+            status_lines.append(f"⚠ Instagram投稿でエラー: {error}")
+
+    if DRY_RUN:
+        status = "🧪 DRY RUN 完了"
+        subject_prefix = "【DRY RUN】"
+    elif error:
+        status = "⚠ 投稿失敗"
+        subject_prefix = "【本質のAI活用術/要確認】"
+    else:
+        status = "✅ 投稿完了"
+        subject_prefix = "【本質のAI活用術】"
+
+    body = f"""{status}
+
+【投稿キャプション】
 {caption}
 
----
-⚠ これは自動生成された下書きです。内容を確認のうえ、ご自身でInstagramに投稿してください。
-(画像はこのメールに添付されています)
+【結果】
+{chr(10).join(status_lines)}
 """
     send_mail(
-        f"【本質のAI活用術】今日のInstagram投稿案 ({datetime.date.today()})",
+        f"{subject_prefix}今日のInstagramリール投稿 ({datetime.date.today()})",
         body,
         attachment_path=image_path,
     )
+
+    if error:
+        raise RuntimeError(error)
 
 
 if __name__ == "__main__":
