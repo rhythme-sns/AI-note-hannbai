@@ -55,6 +55,13 @@ def generate_structured_with_search(
         messages=[{"role": "user", "content": prompt}],
     )
     text = "".join(block.text for block in response.content if block.type == "text")
+    if not text.strip():
+        # web_searchでトークンを使い切り、最終テキストが空になることがある。原因が分かるよう詳細を出す
+        block_types = [block.type for block in response.content]
+        raise RuntimeError(
+            f"Claudeの応答が空でした(stop_reason={response.stop_reason}, blocks={block_types})。"
+            "max_tokensを増やすか、プロンプトを短くしてください。"
+        )
     return json.loads(text)
 
 

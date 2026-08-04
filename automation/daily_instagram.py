@@ -138,7 +138,7 @@ def generate_content() -> tuple[str, str]:
     result = generate_structured_with_search(
         build_prompt(angle, scene_angle, scene_time, scene_workspace, scene_accent),
         SCHEMA,
-        max_tokens=3000,
+        max_tokens=6000,
     )
 
     image_prompt = result["image_prompt"][:3500]  # OpenAI側の上限に余裕を持たせて安全に切り詰める
