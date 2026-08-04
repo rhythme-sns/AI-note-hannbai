@@ -1,17 +1,32 @@
-"""Instagramリール用の縦型動画(画像+落ち着いたアンビエント音)をffmpegで生成する。
+"""Instagramリール用の縦型動画(画像+明るめのアンビエント音)をffmpegで生成する。
 
 著作権のある音源ファイルを外部から取得することはできないため、
-BGMはffmpegのlavfi(サイン波+トレモロ+ローパス)で「落ち着いたリズム」を
-数学的に合成する。3種類のプリセットを日付でローテーションする。
+BGMはffmpegのlavfi(サイン波の長3和音+2段トレモロ+ビブラート)で
+「明るく、抑揚のあるリズム」を数学的に合成する。3種類のプリセットを日付でローテーションする。
 """
 import subprocess
 from pathlib import Path
 
-# 3種類のアンビエントプリセット(和音の高さ・揺れの速さを変えて雰囲気を変える)
+# 3種類のアンビエントプリセット(すべて長3和音+高音のきらめきで明るい響きにする)
 AMBIENT_PRESETS = [
-    {"freqs": [110.00, 164.81, 220.00], "weights": "1 0.6 0.4", "tremolo_f": 0.15, "tremolo_d": 0.35},
-    {"freqs": [146.83, 220.00, 293.66], "weights": "1 0.6 0.4", "tremolo_f": 0.20, "tremolo_d": 0.30},
-    {"freqs": [87.31, 130.81, 174.61], "weights": "1 0.6 0.4", "tremolo_f": 0.12, "tremolo_d": 0.40},
+    {  # Cメジャー基調
+        "freqs": [130.81, 164.81, 196.00, 523.25],
+        "weights": "1 0.7 0.55 0.18",
+        "tremolo_f1": 0.18, "tremolo_d1": 0.45,
+        "tremolo_f2": 0.9, "tremolo_d2": 0.18,
+    },
+    {  # Gメジャー基調
+        "freqs": [196.00, 246.94, 293.66, 587.33],
+        "weights": "1 0.7 0.55 0.18",
+        "tremolo_f1": 0.22, "tremolo_d1": 0.40,
+        "tremolo_f2": 1.1, "tremolo_d2": 0.18,
+    },
+    {  # Fメジャー基調
+        "freqs": [174.61, 220.00, 261.63, 698.46],
+        "weights": "1 0.7 0.55 0.18",
+        "tremolo_f1": 0.15, "tremolo_d1": 0.5,
+        "tremolo_f2": 0.75, "tremolo_d2": 0.18,
+    },
 ]
 
 REEL_WIDTH = 1080
@@ -29,7 +44,7 @@ def _run_ffmpeg(cmd: list[str]) -> None:
 
 
 def generate_ambient_track(preset_index: int, duration: int, out_path: Path) -> Path:
-    """落ち着いたリズムのアンビエントトラックを合成して生成する。"""
+    """明るく抑揚のあるアンビエントトラックを合成して生成する。"""
     preset = AMBIENT_PRESETS[preset_index % len(AMBIENT_PRESETS)]
     inputs: list[str] = []
     for freq in preset["freqs"]:
@@ -37,9 +52,11 @@ def generate_ambient_track(preset_index: int, duration: int, out_path: Path) -> 
     n = len(preset["freqs"])
     filter_complex = (
         f"amix=inputs={n}:duration=longest:weights={preset['weights']},"
-        "lowpass=f=1800,"
-        f"tremolo=f={preset['tremolo_f']}:d={preset['tremolo_d']},"
-        "aecho=0.8:0.9:60:0.3,"
+        "lowpass=f=4200,"  # 高音域を残して明るい音色にする
+        f"tremolo=f={preset['tremolo_f1']}:d={preset['tremolo_d1']},"  # ゆっくりした抑揚
+        f"tremolo=f={preset['tremolo_f2']}:d={preset['tremolo_d2']},"  # 速めの揺れを重ねて表情を出す
+        "vibrato=f=5:d=0.25,"
+        "aecho=0.8:0.85:40:0.25,"
         "volume=0.5[a]"
     )
     _run_ffmpeg([
