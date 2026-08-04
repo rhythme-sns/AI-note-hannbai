@@ -5,7 +5,6 @@ import datetime
 from common import generate_structured_with_search, send_mail, BRAND_CONTEXT
 from social_post import post_thread_to_x, post_thread_to_threads
 
-NOTE_URL = "https://note.com/sakaki_ai"
 DRY_RUN = os.environ.get("DRY_RUN", "false").lower() == "true"
 
 BASE_PATTERNS = {
@@ -24,15 +23,14 @@ SCHEMA = {
         "x_post": {
             "type": "string",
             "description": (
-                "X用、140字以内の単発ポスト本文。文末に「続きはこちらから」などのひと言(CTA)を添えたうえで、"
-                f"直後に {NOTE_URL} を貼ること(URLだけを裸で置かない)"
+                "X用、140字以内の単発ポスト本文。CTAやURLは含めず、投稿本文だけで完結させること"
             ),
         },
         "threads_post": {
             "type": "string",
             "description": (
                 "Threads用、単発ポスト本文。x_postと伝えたい要点は同じだが、言い回しや切り出し方を変え、"
-                f"丸写しにならないようにする。こちらもCTA付きで {NOTE_URL} を貼ること"
+                "丸写しにならないようにする。こちらもCTAやURLは含めない"
             ),
         },
     },
@@ -60,8 +58,7 @@ web_searchで、AI活用・生成AI関連で発信しているインフルエン
 X用と同じ要点・同じテーマを扱うが、言い回しや切り口を変え、Xの投稿をそのままコピーしたようにならないようにする。
 
 # 制約
-- 文末には必ず「続きはこちらから👇」のようなひと言(CTA)を入れたうえで、直後に {NOTE_URL} を貼ること。
-  URLだけを裸で置いたり、プレースホルダーを書いたりしないこと
+- CTAやURL、note誘導文は入れないこと。投稿本文だけで完結させる
 - 誇張・釣り表現、実在しない実績数字、特定個人の断定的引用は禁止です
 - 指定されたJSON形式で出力してください
 """
