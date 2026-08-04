@@ -19,6 +19,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r automation/requirements.txt
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: ffmpeg -version
       - run: python automation/daily_instagram.py
         env:
