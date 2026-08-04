@@ -1,11 +1,14 @@
-"""Instagramリール用の縦型動画(画像+明るめのアンビエント音)をffmpegで生成する。
+"""Instagramリール用の縦型動画(画像+BGM)をffmpegで生成する。
 
-著作権のある音源ファイルを外部から取得することはできないため、
-BGMはffmpegのlavfi(サイン波の長3和音+2段トレモロ+ビブラート)で
-「明るく、抑揚のあるリズム」を数学的に合成する。3種類のプリセットを日付でローテーションする。
+BGMは automation/music/ に置かれた実在の音源ファイル(mp3等、ユーザーが用意したもの)を
+日付でローテーションして使う。音源ファイルが1つも用意されていない場合のみ、
+ffmpegのlavfiで合成したアンビエント音にフォールバックする。
 """
 import subprocess
 from pathlib import Path
+
+MUSIC_DIR = Path(__file__).parent / "music"
+MUSIC_EXTENSIONS = (".mp3", ".m4a", ".wav", ".aac", ".ogg")
 
 # 3種類のアンビエントプリセット(すべて長3和音+高音のきらめきで明るい響きにする)
 AMBIENT_PRESETS = [
@@ -64,6 +67,38 @@ def generate_ambient_track(preset_index: int, duration: int, out_path: Path) -> 
         *inputs,
         "-filter_complex", filter_complex,
         "-map", "[a]",
+        str(out_path),
+    ])
+    return out_path
+
+
+def _list_music_tracks() -> list[Path]:
+    if not MUSIC_DIR.exists():
+        return []
+    return sorted(
+        p for p in MUSIC_DIR.iterdir()
+        if p.is_file() and p.suffix.lower() in MUSIC_EXTENSIONS
+    )
+
+
+def prepare_bgm_track(preset_index: int, duration: int, out_path: Path) -> Path:
+    """automation/music/ の実在の音源ファイルを日付でローテーションし、動画の長さに合わせて
+    トリム/ループ(短ければループ、長ければカット)してフェードイン・アウトを付ける。
+    音源ファイルが用意されていない場合は、合成アンビエント音にフォールバックする。
+    """
+    tracks = _list_music_tracks()
+    if not tracks:
+        print("⚠ automation/music/ に音源ファイルが見つからないため、合成アンビエント音にフォールバックします")
+        return generate_ambient_track(preset_index, duration, out_path)
+
+    source = tracks[preset_index % len(tracks)]
+    fade_out_start = max(duration - 1.5, 0)
+    _run_ffmpeg([
+        "ffmpeg", "-y",
+        "-stream_loop", "-1", "-i", str(source),
+        "-t", str(duration),
+        "-af", f"afade=t=in:st=0:d=1.5,afade=t=out:st={fade_out_start}:d=1.5",
+        "-ar", "44100", "-ac", "2",
         str(out_path),
     ])
     return out_path

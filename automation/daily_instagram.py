@@ -7,7 +7,7 @@ from pathlib import Path
 import requests
 
 from common import generate_structured_with_search, send_mail, BRAND_CONTEXT
-from reels_media import generate_ambient_track, build_reel_video
+from reels_media import prepare_bgm_track, build_reel_video
 from media_repo import push_video_and_get_url
 from instagram_post import post_reel_to_instagram
 
@@ -189,9 +189,9 @@ def main() -> None:
     image_prompt, caption = generate_content()
     image_path = generate_image(image_prompt)
 
-    # BGMは3種類のアンビエントプリセットを日付でローテーション
+    # BGMはautomation/music/の音源ファイルを日付でローテーション(未用意なら合成音にフォールバック)
     preset_index = datetime.date.today().toordinal() % 3
-    audio_path = generate_ambient_track(
+    audio_path = prepare_bgm_track(
         preset_index, REEL_DURATION_SECONDS, OUTPUT_DIR / f"audio_{datetime.date.today()}.wav"
     )
     video_path = build_reel_video(
