@@ -2,7 +2,7 @@ name: SNS Midday Thread
 
 on:
   schedule:
-    - cron: "12 3 * * *"   # 毎日 12:12 JST(ちょうど12:00ではなく、アクセス集中を避けるため数分ずらす)
+    - cron: "12 18 * * *"   # 毎日 12:12 JST着地を狙う(実際の発火が9時間遅れる事象を踏まえ、設定を9時間前倒し)
   workflow_dispatch:
     inputs:
       dry_run:

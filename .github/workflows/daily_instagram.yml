@@ -2,7 +2,7 @@ name: Daily Instagram Reel Post
 
 on:
   schedule:
-    - cron: "3 23 * * *"   # 毎日 8:03 JST(ちょうど8:00ではなく、アクセス集中を避けるため数分ずらす)
+    - cron: "3 14 * * *"   # 毎日 8:03 JST着地を狙う(実際の発火が9時間遅れる事象を踏まえ、設定を9時間前倒し)
   workflow_dispatch:
     inputs:
       dry_run:

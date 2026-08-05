@@ -4,6 +4,8 @@ import datetime
 
 from common import generate_structured_with_search, send_mail, BRAND_CONTEXT
 from social_post import post_thread_to_x, post_thread_to_threads
+from content_research import research_trending_ai_content
+from content_strategist import plan_content_angle
 
 DRY_RUN = os.environ.get("DRY_RUN", "false").lower() == "true"
 
@@ -39,17 +41,18 @@ SCHEMA = {
 }
 
 
-def build_prompt(slot_label: str, pattern: str) -> str:
+def build_prompt(slot_label: str, pattern: str, angle: str, key_point: str) -> str:
     return f"""あなたは「本質のAI活用術」の集客を担当するSNSマーケターです。
 
 {BRAND_CONTEXT}
 
-# リサーチ
-web_searchで、AI活用・生成AI関連で発信しているインフルエンサーが今どんな切り口・フォーマットで投稿しているかを調べてください。
-特定個人を名指しで引用・模倣せず、一般的な傾向として要約し着想に使ってください。
+# 今回の切り口(リサーチ担当・企画担当エージェントが事前検討済み)
+切り口:{angle}
+伝えたい核心:{key_point}
 
 # 今日作成するもの({slot_label}の単発ポスト)
 今日のパターン:{pattern}
+上記の「切り口」「伝えたい核心」を土台に、今日のパターンの語り口で投稿本文を作成してください。
 
 ## X用
 140字以内。ハッシュタグを2〜4個(#本質のAI活用術 を必ず含む)。
@@ -73,8 +76,15 @@ def main() -> None:
     offset = 0 if slot == "morning" else 3
     pattern = BASE_PATTERNS[(weekday + offset) % 7]
 
+    # 投稿前タスク①:人気AI発信アカウントの傾向をリサーチ
+    research_summary = research_trending_ai_content()
+    # 投稿前タスク②:リサーチを踏まえて今回の切り口を企画
+    plan = plan_content_angle(research_summary, slot_label)
+    angle = plan["angle"]
+    key_point = plan["key_point"]
+
     result = generate_structured_with_search(
-        build_prompt(slot_label, pattern), SCHEMA, max_tokens=2000
+        build_prompt(slot_label, pattern, angle, key_point), SCHEMA, max_tokens=2000
     )
     x_post = result["x_post"]
     threads_post = result["threads_post"]
@@ -99,6 +109,10 @@ def main() -> None:
 
     status = "🧪 DRY RUN 完了" if DRY_RUN else ("✅ 自動投稿 完了" if not errors else "⚠ 自動投稿 一部エラーあり")
     body = f"""{status}
+
+【今回の切り口】
+{angle}
+(核心:{key_point})
 
 【X 単発ポスト({slot_label})】
 {x_post}

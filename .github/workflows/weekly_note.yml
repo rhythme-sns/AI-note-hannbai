@@ -2,7 +2,7 @@ name: Weekly Note Draft
 
 on:
   schedule:
-    - cron: "15 0 * * 1"   # 毎週月曜 9:15 JST
+    - cron: "15 15 * * 0"   # 毎週月曜 9:15 JST着地を狙う(実際の発火が9時間遅れる事象を踏まえ、設定を9時間前倒し。UTC上は日曜15:15)
   workflow_dispatch: {}
 
 permissions:

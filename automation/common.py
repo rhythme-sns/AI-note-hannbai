@@ -65,6 +65,28 @@ def generate_structured_with_search(
     return json.loads(text)
 
 
+def generate_structured(
+    prompt: str, schema: dict, max_tokens: int = 1200, timeout: float = 120.0
+) -> dict:
+    """Web検索なしでClaude APIを呼び出し、指定したJSONスキーマに沿ったdictを返す。
+    既に手元にある情報を要約・整理するだけの用途(検索不要なエージェント)向け。
+    """
+    response = client.with_options(timeout=timeout).messages.create(
+        model=MODEL,
+        max_tokens=max_tokens,
+        output_config={"format": {"type": "json_schema", "schema": schema}},
+        messages=[{"role": "user", "content": prompt}],
+    )
+    text = "".join(block.text for block in response.content if block.type == "text")
+    if not text.strip():
+        block_types = [block.type for block in response.content]
+        raise RuntimeError(
+            f"Claudeの応答が空でした(stop_reason={response.stop_reason}, blocks={block_types})。"
+            "max_tokensを増やすか、プロンプトを短くしてください。"
+        )
+    return json.loads(text)
+
+
 def send_mail(subject: str, body: str, attachment_path: Path | None = None) -> None:
     msg = MIMEMultipart()
     msg["From"] = GMAIL_ADDRESS

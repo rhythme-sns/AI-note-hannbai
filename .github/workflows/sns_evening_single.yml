@@ -2,7 +2,7 @@ name: SNS Evening Single Post
 
 on:
   schedule:
-    - cron: "20 11 * * *"   # 毎日 20:20 JST(ちょうど20:00ではなく、アクセス集中を避けるため数分ずらす)
+    - cron: "20 2 * * *"   # 毎日 20:20 JST着地を狙う(実際の発火が9時間遅れる事象を踏まえ、設定を9時間前倒し)
   workflow_dispatch:
     inputs:
       dry_run:
