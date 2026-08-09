@@ -1,4 +1,3 @@
-import json
 import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -6,18 +5,12 @@ from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 from pathlib import Path
 from dotenv import load_dotenv
-import anthropic
 
 load_dotenv()
 
-ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 GMAIL_ADDRESS = os.environ["GMAIL_ADDRESS"]
 GMAIL_APP_PASSWORD = os.environ["GMAIL_APP_PASSWORD"]
 MAIL_TO = os.environ["MAIL_TO"]
-
-MODEL = "claude-sonnet-5"
-
-client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 BRAND_CONTEXT = """
 アカウント名・発信者ペルソナ:「サカキ」(表示名「サカキ｜本質のAI活用術」)
@@ -28,63 +21,6 @@ BRAND_CONTEXT = """
 著者の実務背景:勤怠表作成、メール仕分け管理、Excel VBA作成、業務アプリ作成、AI自動化による業務委託
 トーン:誠実、煽らない。「本質」を連呼せず、内容で語る。実在しない具体的な実績数字を捏造しない。特定の実在人物を名指しで断定的に引用しない
 """
-
-
-def generate_with_search(prompt: str, max_tokens: int = 4000, timeout: float = 300.0) -> str:
-    """Claude APIを組み込みWeb検索ツール付きで呼び出し、最終テキストを返す。"""
-    response = client.with_options(timeout=timeout).messages.create(
-        model=MODEL,
-        max_tokens=max_tokens,
-        tools=[{"type": "web_search_20260209", "name": "web_search"}],
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return "".join(block.text for block in response.content if block.type == "text")
-
-
-def generate_structured_with_search(
-    prompt: str, schema: dict, max_tokens: int = 4000, timeout: float = 300.0
-) -> dict:
-    """Web検索ツール付きで呼び出し、指定したJSONスキーマに沿ったdictを返す。
-    完全自動投稿など、人がレビューしない用途で出力パースの信頼性を上げるために使う。
-    """
-    response = client.with_options(timeout=timeout).messages.create(
-        model=MODEL,
-        max_tokens=max_tokens,
-        tools=[{"type": "web_search_20260209", "name": "web_search"}],
-        output_config={"format": {"type": "json_schema", "schema": schema}},
-        messages=[{"role": "user", "content": prompt}],
-    )
-    text = "".join(block.text for block in response.content if block.type == "text")
-    if not text.strip():
-        # web_searchでトークンを使い切り、最終テキストが空になることがある。原因が分かるよう詳細を出す
-        block_types = [block.type for block in response.content]
-        raise RuntimeError(
-            f"Claudeの応答が空でした(stop_reason={response.stop_reason}, blocks={block_types})。"
-            "max_tokensを増やすか、プロンプトを短くしてください。"
-        )
-    return json.loads(text)
-
-
-def generate_structured(
-    prompt: str, schema: dict, max_tokens: int = 1200, timeout: float = 120.0
-) -> dict:
-    """Web検索なしでClaude APIを呼び出し、指定したJSONスキーマに沿ったdictを返す。
-    既に手元にある情報を要約・整理するだけの用途(検索不要なエージェント)向け。
-    """
-    response = client.with_options(timeout=timeout).messages.create(
-        model=MODEL,
-        max_tokens=max_tokens,
-        output_config={"format": {"type": "json_schema", "schema": schema}},
-        messages=[{"role": "user", "content": prompt}],
-    )
-    text = "".join(block.text for block in response.content if block.type == "text")
-    if not text.strip():
-        block_types = [block.type for block in response.content]
-        raise RuntimeError(
-            f"Claudeの応答が空でした(stop_reason={response.stop_reason}, blocks={block_types})。"
-            "max_tokensを増やすか、プロンプトを短くしてください。"
-        )
-    return json.loads(text)
 
 
 def send_mail(subject: str, body: str, attachment_path: Path | None = None) -> None:

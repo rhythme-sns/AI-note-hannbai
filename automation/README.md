@@ -1,164 +1,99 @@
-# 本質のAI活用術 自動化スクリプト
+# 本質のAI活用術 自動化(claude.ai/code routines版)
 
-GitHub Actions(クラウド)上で動くPythonスクリプトです。**PCの電源が入っていなくても実行されます。**
-実行ログはGitHubの「Actions」タブでいつでも確認でき、失敗した場合もそこに残ります。
+**claude.ai/code の「routines」(スケジュール済みクラウドエージェント)** 上で動きます。
+PCの電源が入っていなくても実行され、Anthropic APIやOpenAI APIの従量課金は一切発生しません
+(Claude Proのサブスクリプション契約の範囲内で実行されます)。
 
 ## 何をするか
 
-| スクリプト | 内容 | 投稿・送信先 | 実行タイミング |
+| routine | 内容 | 投稿・送信先 | 実行タイミング(JST) |
 |---|---|---|---|
-| `sns_single_post.py morning` | Web検索でAI活用インフルエンサーの傾向を調べ、単発ポストを生成し、**XとThreadsに自動投稿**する(朝用) | X・Threadsに自動投稿 + 結果報告メール | 毎日 8:07 JST |
-| `sns_thread.py` | 同様にリサーチし、5投稿構成のスレッドを生成して**XとThreadsに自動投稿**する(お昼用) | X・Threadsに自動投稿 + 結果報告メール | 毎日 12:12 JST |
-| `sns_single_post.py evening` | 朝とは型をずらした単発ポストを生成して**XとThreadsに自動投稿**する(夜用) | X・Threadsに自動投稿 + 結果報告メール | 毎日 20:20 JST |
-| `weekly_note.py` | 似た発信者をリサーチし、まだ扱っていない新テーマを自分で提案してnote新作(企画〜集客文まで)を作成。扱ったテーマは `themes_log.json` に記録し、二度と同じテーマを提案しない | メール(下書き、要手動投稿) | 毎週月曜 9:15 JST |
-| `daily_instagram.py` | Instagramリール用の縦型動画(OpenAIで生成した画像をffmpegでKen Burns風にアニメーション化+ローテーションBGM)+キャプションを作成し、**Instagramに自動投稿**する | Instagramに自動投稿 + 結果報告メール | 毎日 8:03 JST |
+| 朝の単発ポスト | Claude自身がWeb検索でAI活用インフルエンサーの傾向を調べ、単発ポストを生成し、**XとThreadsに自動投稿**する | X・Threadsに自動投稿 + 結果報告メール | 毎日 8:07 |
+| お昼のスレッド | 同様にリサーチし、5投稿構成のスレッドを生成して**XとThreadsに自動投稿**する | X・Threadsに自動投稿 + 結果報告メール | 毎日 12:12 |
+| 夜の単発ポスト | 朝とは型をずらした単発ポストを生成して**XとThreadsに自動投稿**する | X・Threadsに自動投稿 + 結果報告メール | 毎日 20:20 |
+| 週次note下書き | 似た発信者をリサーチし、まだ扱っていない新テーマを自分で提案してnote新作(企画〜集客文まで)を作成。扱ったテーマは `themes_log.json` に記録し、二度と同じテーマを提案しない | メール(下書き、要手動投稿) | 毎週月曜 9:15 |
+| Instagramリール | Canva/Gamma連携で画像を生成し、ffmpegでKen Burns風にアニメーション化+ローテーションBGMを乗せた縦型動画+キャプションを作成し、**Instagramに自動投稿**する | Instagramに自動投稿 + 結果報告メール | 毎日 8:03 |
 
-> ⚠ **SNS(X・Threads・Instagram)の4本(朝の単発/お昼のスレッド/夜の単発/Instagramリール)は完全自動投稿です。**
-> 人の確認を挟まず、生成された内容がそのままX・Threads・Instagramに公開されます。それぞれ独立して実行されるため、朝と夜の単発ポストは
-> 内容の切り口をずらして生成し、単純な繰り返しにならないようにしています。
-> 実行時刻は、GitHub Actionsで多くのワークフローが集中しがちな「ちょうど◯時」を避け、数分ずらしてあります。
+> ⚠ **SNS(X・Threads・Instagram)の4本は完全自動投稿です。** 人の確認を挟まず、生成された内容がそのまま公開されます。
 > noteは引き続き下書きメールのみで、実際の投稿はご自身で行ってください。
 
-> 🎵 **Instagramリールの背景音楽(BGM)について**: `automation/music/` に置いた実在の音源ファイル(mp3等)を
-> 日付で3パターンローテーションして使います。詳しい手順は `automation/music/README.md` を参照してください。
-> 音源ファイルが1つも置かれていない場合のみ、ffmpegで合成した著作権フリーのアンビエント音に自動フォールバックします
-> (`automation/reels_media.py` の `AMBIENT_PRESETS`)。
+## アーキテクチャ(旧GitHub Actions版との違い)
 
----
+以前はGitHub Actions上のPythonスクリプトがAnthropic API(文章生成・Web検索、従量課金)と
+OpenAI API(画像生成、従量課金)を直接呼び出していました。この構成では、それらのAPI呼び出しは
+**すべてroutine実行時のClaude自身(Claude Pro契約分)が担当**し、Pythonスクリプトは
+「投稿API呼び出し・動画合成・メール送信」といった機械的な処理だけを行います。
+
+具体的には、各routineは以下の流れで動きます:
+
+1. Claude(routineのエージェント自身)が `automation/common.py` の `BRAND_CONTEXT` を読み、
+   ブランドの世界観を把握する
+2. Claude自身の **WebSearch** ツールでAI活用系の発信トレンドをリサーチする
+3. Claude自身の判断で、今回の切り口・投稿文・(Instagramの場合は画像)を作成する
+4. 作成した内容を `automation/outputs/*.json` に書き出す
+5. `pip install -r automation/requirements.txt` を実行し、`python automation/post_single.py <json>` など
+   機械的な投稿スクリプトをBashで実行する(X/Threads/Instagram投稿、動画合成、メール送信はここで行う)
+
+そのため、`content_research.py` / `content_strategist.py` / `sns_single_post.py` / `sns_thread.py` /
+`weekly_note.py` / `daily_instagram.py` (いずれも旧・Claude/OpenAI API直接呼び出し版)は廃止し、
+代わりに以下の「機械的な実行部分だけ」のスクリプトを追加しています:
+
+- `post_single.py` … 単発ポストのJSONを受け取り、X/Threadsに投稿+結果メール
+- `post_thread.py` … スレッドのJSONを受け取り、X/Threadsに投稿+結果メール
+- `send_note_draft.py` … note下書きのJSONを受け取り、下書きメール送信+`themes_log.json`更新
+- `post_instagram_reel.py` … 生成済み画像+キャプションのJSONを受け取り、ffmpegで動画化して
+  公開用リポジトリへpush、Instagramに投稿+結果メール(画像添付)
+
+`social_post.py`(X/Threads投稿)・`instagram_post.py`(Instagram投稿)・`media_repo.py`(動画配信用リポジトリへのpush)・
+`reels_media.py`(ffmpegでの動画・BGM合成)は、もともとClaude/OpenAI APIを呼んでいなかったため変更していません。
+
+> 🎵 Instagramリールの背景音楽(BGM)は、以前と同様 `automation/music/` に置いた実在の音源ファイルを
+> 日付で3パターンローテーションして使います(未用意の場合はffmpeg合成音にフォールバック)。
 
 ## セットアップ手順
 
-### 1. Anthropic APIキーの取得(文章生成・Web検索用)
+### 1. X (旧Twitter) APIキーの取得(自動投稿用)
 
-1. https://console.anthropic.com にアクセスし、アカウントを作成(またはログイン)
-2. 左メニューの **Billing** から支払い方法(クレジットカード)を登録する
-   - 従量課金制です。Claude Sonnet 5を使用し、目安として入力$2〜3/出力$10〜15 per 100万トークン
-     (2026年8月時点、intro価格あり)。1回あたり数十円〜百円程度が目安です
-3. 左メニューの **API Keys** から「Create Key」を押し、キー(`sk-ant-...`)をコピーする(一度しか表示されません)
+以前と同じ手順です。投稿先の「サカキ」用Xアカウントでログインした状態で、
+https://developer.x.com で開発者アプリを作成し、`X_API_KEY` / `X_API_SECRET` /
+`X_ACCESS_TOKEN` / `X_ACCESS_TOKEN_SECRET` を発行してください(App permissionsは
+**Read and Write** に設定)。
 
-### 2. OpenAI APIキーの取得(Instagram画像生成用)
+### 2. Threads APIキーの取得(自動投稿用)
 
-1. https://platform.openai.com にアクセスし、アカウントを作成(またはログイン)
-2. **Settings → Billing** で支払い方法を登録し、少額のクレジットを追加する
-3. **API keys** から新規キー(`sk-...`)を作成しコピーする
+以前と同じ手順です。https://developers.facebook.com でアプリを作成し「Threads API」を追加、
+Graph API Explorerでアクセストークンを発行→長期(60日)トークンに交換して
+`THREADS_USER_ID` / `THREADS_ACCESS_TOKEN` を控えてください。
 
-### 3. Gmailアプリパスワードの発行(goliath24520@gmail.comで送信)
+> ⚠ 長期トークンは60日で失効します。失効前に交換URLを再実行し、環境変数(下記手順6)を更新してください。
 
-1. goliath24520@gmail.com で https://myaccount.google.com/security を開く
-2. 「2段階認証」が無効な場合は先に有効化する(アプリパスワードには2段階認証が必須)
-3. https://myaccount.google.com/apppasswords を開き、アプリ名(例:「note自動化」)を入力して作成
-4. 表示された16桁のパスワード(スペースなしでOK)を控えておく
+### 3. Instagram APIキーの取得(リール自動投稿用)
 
-### 4. X (旧Twitter) APIキーの取得(自動投稿用)
+以前と同じ手順です。「Instagram API with Instagram Login」方式で `IG_USER_ID` /
+`IG_ACCESS_TOKEN`(`IGAA`から始まる)を発行してください。こちらも60日で失効します。
 
-投稿先の「サカキ」用Xアカウントでログインした状態で進めてください。
+### 4. Gmailアプリパスワードの発行(結果報告メール用)
 
-1. https://developer.x.com にアクセスし、開発者アカウントを申請・作成する
-2. 「Projects & Apps」から新しいプロジェクト・アプリを作成する
-3. 作成したアプリの **Settings → User authentication settings** を開き、
-   - App permissions を **Read and Write** に変更
-   - Type of App は「Web App, Automated App or Bot」を選択
-   - Callback URI / Website URL は仮で `https://example.com` などを入力(自動投稿だけなら実際に使いません)
-4. **Keys and tokens** タブを開き、以下4つを発行・コピーする(権限変更後は再発行が必要です):
-   - API Key / API Key Secret
-   - Access Token / Access Token Secret(「Generate」ボタンで発行。Read and Write権限になっていることを確認)
+以前と同じ手順です。goliath24520@gmail.com で2段階認証を有効化し、
+https://myaccount.google.com/apppasswords でアプリパスワードを発行してください。
 
-> 無料プランでも投稿(POST)は可能ですが、月間投稿数に上限があります。現在の上限は
-> developer.x.com のダッシュボードで確認してください。想定投稿数(単発1件+スレッド14件=1日15件、
-> X・Threads合計で1日30件×30日=約900件)が上限を超えそうな場合は、有料プランへの変更を検討してください。
+### 5. リール動画配信用のPublicリポジトリとPATを用意する
 
-### 5. Threads APIキーの取得(自動投稿用)
+以前と同じ手順です。動画ファイルだけを置く空のPublicリポジトリ(例:`ai-note-reels-media`)を作成し、
+Fine-grained PAT(Contents: Read and write)を発行して `MEDIA_REPO` / `MEDIA_REPO_TOKEN` を控えてください。
 
-投稿先の「サカキ」用Threadsアカウント(Instagramと連携したプロフェッショナルアカウントである必要があります)で進めてください。
+### 6. claude.ai/code の「環境(Environment)」に環境変数を登録する
 
-1. https://developers.facebook.com にアクセスし、開発者アカウントを作成する
-2. 「My Apps」から新しいアプリを作成(タイプは「Other」→「Business」などを選択)
-3. アプリのダッシュボードで **製品を追加** から「Threads API」を追加する
-4. Threads APIの設定画面から、投稿したいThreadsアカウントを連携する
-5. **Graph API Explorer**(https://developers.facebook.com/tools/explorer/)を開き、
-   作成したアプリを選択→対象のThreadsユーザーとしてアクセストークンを発行する
-   (`threads_basic`, `threads_content_publish` の権限を付与)
-6. 発行された短期トークンを、長期(60日)トークンに交換する(以下のURLをブラウザで開く。
-   `{app-id}` `{app-secret}` `{short-lived-token}` は実際の値に置き換える):
-   ```
-   https://graph.threads.net/access_token?grant_type=th_exchange_token&client_id={app-id}&client_secret={app-secret}&access_token={short-lived-token}
-   ```
-   返ってきたJSONの `access_token` が `THREADS_ACCESS_TOKEN` です
-7. 投稿対象の `THREADS_USER_ID` は、以下のURLで確認できます:
-   ```
-   https://graph.threads.net/v1.0/me?fields=id,username&access_token={long-lived-token}
-   ```
+このリポジトリには `.env` を置きません(routineはクラウド上の独立したセッションで動くため、
+ローカルの `.env` は読み込まれません)。代わりに、routineが使う **claude.ai/code の環境(Environment)** に
+環境変数として登録します。
 
-> ⚠ **長期トークンは60日で失効します。** 失効するとThreads投稿だけがエラーになります(Xやnote/Instagramは影響を受けません)。
-> 60日ごとに上記6の交換URLを再度実行してSecretsを更新するか、失効前にリマインダーを設定しておくことをおすすめします。
+1. https://claude.ai/code を開き、環境(Environments)の設定画面に移動する
+2. routine用に使う環境(既存の「Default」など)を選び、環境変数を追加する画面を開く
+3. 以下を登録する(値は手順1〜4で控えたもの):
 
-### 6. Instagram APIキーの取得(リール自動投稿用)
-
-投稿先の「サカキ」用Instagramアカウント(プロフェッショナルアカウントである必要があります)で進めてください。
-手順5でThreads用に作成したアプリをそのまま使えます。
-
-このプロジェクトは **「Instagram API with Instagram Login」**(Facebookページを介さない新しい方式)を使用します。
-アクセストークンは `IGAA` から始まり、`IG_USER_ID` は数字だけでなく英数字混じりになります(旧方式の `EAA` トークン・数字のみのIDとは別物なので、間違えないよう注意してください)。
-
-1. developers.facebook.comのアプリのダッシュボードで **製品を追加** から「Instagram」を追加する
-2. 左メニューの **Instagram → API setup with Instagram Login** を開く
-3. 「Add account」的な手順で、投稿対象のInstagramプロフェッショナルアカウントをテスターとして追加し、Instagram側で連携を承認する
-4. 同じ画面(または「Generate token」ボタン)から、そのアカウント用のアクセストークンを発行する
-   (`instagram_business_basic`, `instagram_business_content_publish` の権限が含まれていることを確認)
-5. 同じ画面に表示される **Instagram User ID** をそのまま控える → これが `IG_USER_ID` です
-6. 発行されたトークンを、長期(60日)トークンに交換する(ブラウザで以下を開く。
-   `{app-secret}` はアプリの「設定→ベーシック」、`{short-lived-token}` は手順4のトークンに置き換える):
-   ```
-   https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret={app-secret}&access_token={short-lived-token}
-   ```
-   返ってきたJSONの `access_token` の値だけ(引用符・前後の`{}`は含めない)が `IG_ACCESS_TOKEN` です
-
-> ⚠ **長期トークンは60日で失効します。** 失効するとInstagram投稿だけがエラーになります(X・Threads・noteは影響を受けません)。
-> 失効前に、以下のURLで更新できます(`{long-lived-token}` を現在のトークンに置き換える。実行すると新しいトークンが返るので、Secretsを更新する):
-> ```
-> https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token={long-lived-token}
-> ```
-> 60日ごとにこれを実行してSecretsを更新するか、失効前にリマインダーを設定しておくことをおすすめします。
-
-> 🔍 トークンが正しく動くか事前に確認したい場合は、ブラウザで以下を開いてアカウント情報が返ってくるか確認できます:
-> ```
-> https://graph.instagram.com/v21.0/me?access_token={token}
-> ```
-
-### 7. リール動画配信用のPublicリポジトリとPATを用意する
-
-Instagram Graph APIは、動画を「認証なしでアクセスできる公開URL」からしか取得できません。
-この自動化リポジトリ(企画書・販売ページ等の事業内容を含む)は非公開のままにしたいため、
-**動画ファイルだけを置く、中身が空の新しいPublicリポジトリ**を別途1つ作成します。
-
-1. https://github.com/new を開き、リポジトリ名を決める(例:`ai-note-reels-media`)、**Public** を選択して「Create repository」
-   (「Add a README file」にチェックを入れて初回コミットを作っておくと、後の手順がスムーズです)
-2. https://github.com/settings/tokens?type=beta を開き、**Generate new token** から Fine-grained
-   personal access tokenを作成する
-   - Repository access: 「Only select repositories」→ 手順1で作った `ai-note-reels-media` のみを選択
-   - Permissions: **Contents** を **Read and write** に設定
-   - 有効期限は任意(期限切れ後は投稿がエラーになるため、長め+再発行のリマインダーを推奨)
-3. 発行されたトークン(`github_pat_...`)を控える。これが `MEDIA_REPO_TOKEN` です
-4. `MEDIA_REPO` には `あなたのGitHubユーザー名/ai-note-reels-media` の形式で控えておく
-
-> ⚠ このリポジトリは**誰でも中身(投稿済みの動画ファイル)が見られる状態**になります。
-> 動画は投稿のたびに古いものを削除して1本だけ残す運用にしていますが、動画自体の内容は公開される前提で扱ってください。
-
-### 8. GitHubリポジトリを作る(メインの自動化リポジトリ)
-
-1. https://github.com/new を開く
-2. リポジトリ名を決める、**Private** を選択して「Create repository」
-3. 作成後に表示されるリモートURLを控えておく
-
-### 9. Secrets(暗号化された環境変数)を登録する
-
-作成したリポジトリの **Settings → Secrets and variables → Actions → New repository secret** から、
-以下をそれぞれ登録してください(値は前の手順で控えたもの):
-
-| Secret名 | 値 |
+| 環境変数名 | 値 |
 |---|---|
-| `ANTHROPIC_API_KEY` | `sk-ant-...` |
-| `OPENAI_API_KEY` | `sk-...` |
 | `GMAIL_ADDRESS` | `goliath24520@gmail.com` |
 | `GMAIL_APP_PASSWORD` | (16桁のアプリパスワード) |
 | `MAIL_TO` | `reon24520@gmail.com` |
@@ -168,78 +103,61 @@ Instagram Graph APIは、動画を「認証なしでアクセスできる公開U
 | `X_ACCESS_TOKEN_SECRET` | Xの Access Token Secret |
 | `THREADS_USER_ID` | ThreadsユーザーID |
 | `THREADS_ACCESS_TOKEN` | Threads長期アクセストークン |
-| `IG_USER_ID` | Instagram User ID(手順6の英数字ID) |
-| `IG_ACCESS_TOKEN` | Instagram長期アクセストークン(`IGAA`から始まる) |
+| `IG_USER_ID` | Instagram User ID |
+| `IG_ACCESS_TOKEN` | Instagram長期アクセストークン |
 | `MEDIA_REPO` | `あなたのGitHubユーザー名/ai-note-reels-media` |
-| `MEDIA_REPO_TOKEN` | 手順7で発行したFine-grained PAT(`github_pat_...`) |
+| `MEDIA_REPO_TOKEN` | 手順5で発行したFine-grained PAT |
 
-### 10. このフォルダをGitHubにpushする
+> `ANTHROPIC_API_KEY` と `OPENAI_API_KEY` はもう不要です(登録しないでください)。
 
-このプロジェクトフォルダ(`notehannbai2`)のルートで実行してください(すでにpush済みの場合は不要です)。
+### 7. Canva / Gammaとの連携を確認する(Instagramリールの画像生成用)
 
-```bash
-cd "C:\Users\reon2\OneDrive\デスクトップ\notehannbai2"
-git add .
-git commit -m "Instagramリール自動投稿対応"
-git push
-```
+Instagramリールの画像は、Claude自身がCanva/Gamma連携(MCP)を使って生成します。
+https://claude.ai/customize/connectors で Canva・Gamma が接続済みであることを確認してください。
 
-`.env` ファイルは `.gitignore` で除外されるため、誤って公開される心配はありません
-(APIキーはSecretsにのみ保存されます)。
+> ⚠ Canva/Gammaは無料プランの範囲内で使う想定ですが、生成頻度や機能によっては
+> 無料枠を超えて別途課金が発生する可能性があります。しばらく運用したら、
+> Canva・Gammaそれぞれの利用状況(ダッシュボード)を確認することをおすすめします。
 
-### 11. 動作確認(手動実行)
+### 8. routineを作成する
 
-GitHubのリポジトリページ → **Actions** タブ → 左側から実行したいワークフロー
-(例:「SNS Morning Single Post」)を選び → 右側の「Run workflow」ボタンを押すと、その場ですぐ実行できます。
+このリポジトリ(`rhythme-sns/AI-note-hannbai`)を対象に、上記5本のroutineを
+https://claude.ai/code/routines で作成します(Claude Codeに「routineを作って」と依頼すれば
+自動で設定できます)。各routineには、投稿する内容の作り方・投稿の仕方・ブランドの制約を
+書いた自己完結型のプロンプトが設定されます。
 
-自動投稿系の4つ(`SNS Morning Single Post` / `SNS Midday Thread` / `SNS Evening Single Post` / `Daily Instagram Reel Post`)は、
-「Run workflow」を押すと **`dry_run`** というチェックボックスが表示されます。
-これに ✅ を入れて実行すると、**実際にはX・Threads・Instagramに投稿せず、生成内容だけをメールで確認**できます。
-チェックを外す(またはスケジュール実行)と通常通り本番投稿されます。
-特にInstagramリールは初回、必ず `dry_run` ✅ で一度動かし、動画やキャプションの仕上がりを確認してから
-本番投稿(チェックなし)に切り替えることを強くおすすめします。
+### 9. 動作確認
 
-数十秒〜数分後に結果報告メールが届けば成功です(件名が「【DRY RUN】」で始まっていれば投稿はされていません)。
-失敗した場合はActionsタブの実行ログに詳細が表示されます。
+各routineの「Run Now」で手動実行できます。`DRY_RUN=true` 相当の確認をしたい場合は、
+プロンプトに「今回はdry runとして、実際の投稿はスキップし、生成内容をメールで報告するだけにして」
+のように一時的に指示するか、routineのプロンプト自体に dry run 手順を組み込んで運用してください。
 
-以降は、設定した時刻に自動で実行されます(PCの電源状態に関係なく動きます)。
+数十秒〜数分後に結果報告メールが届けば成功です。失敗した場合は
+https://claude.ai/code/routines の実行履歴からログを確認できます。
 
 ---
 
 ## テーマの拡張について
 
-`weekly_note.py` は固定リストではなく、毎回Web検索で他のAI活用系インフルエンサーの発信傾向を調べ、
-`themes_log.json` に記録済みの過去テーマと重複しない新テーマを自分で提案してから執筆します。
-そのため運用を続けるほどテーマの引き出しが自然に広がっていきます。
-`themes_log.json` はワークフロー実行のたびに自動更新・コミットされるので、手動で編集する必要はありません。
-
----
-
-## (オプション)ローカルPCでも動かしたい場合
-
-`run_sns_morning.bat` / `run_sns_thread.bat` / `run_sns_evening.bat` / `run_daily_instagram.bat` / `run_weekly_note.bat` を使えば、
-このPC上でも従来通りタスクスケジューラ経由で実行できます。ただしPCの電源が入っている必要があるため、
-基本的にはGitHub Actions側の実行のみで十分です。ローカル実行する場合は `.env` ファイルを
-`.env.example` を元に作成してください。`run_daily_instagram.bat` を使う場合は、あらかじめ
-[ffmpeg](https://ffmpeg.org/download.html) をインストールしてPATHを通しておく必要があります
-(動画・BGM生成に使用します。GitHub Actions側は追加設定なしで利用できます)。
+週次note下書きroutineは、固定リストではなく毎回Claude自身がWeb検索で他のAI活用系インフルエンサーの
+発信傾向を調べ、`themes_log.json` に記録済みの過去テーマと重複しない新テーマを提案してから執筆します。
+routine実行のたびに `themes_log.json` の更新をコミット・pushするよう指示しているため、
+手動で編集する必要はありません。
 
 ---
 
 ## 既知の制約・注意点
 
-- **SNS系の4つ(朝の単発/お昼のスレッド/夜の単発/Instagramリール)は完全自動投稿です。** 生成内容に誤りや不適切な表現があっても、
-  そのまま公開されます。結果報告メールで事後確認する運用になるため、違和感のある投稿があれば都度手動で削除・修正してください
-- **Threads・Instagramの長期アクセストークンはどちらも60日で失効します。** 失効後は再発行してSecretsを更新する必要があります
-- **X APIの無料プランには月間投稿数の上限があります。** 想定投稿量が上限を超えないか、developer.x.comの
-  ダッシュボードで確認してください
-- **Instagramリールの背景音楽は `automation/music/` に置いた音源ファイルを使います。** 商用・二次配布利用が許可された
-  音源かどうかはご自身で確認してください(投稿は一般公開されるため)。ファイルを置いても`git push`し忘れると
-  クラウド側(GitHub Actions)には反映されず、合成音のままになります
-- **リール動画は `MEDIA_REPO` で指定したPublicリポジトリに一時的に公開されます。** 投稿のたびに古い動画は削除して
-  1本だけ残す運用ですが、その動画の中身(生成画像・BGM)は誰でも閲覧・ダウンロードできる状態になります
-- API利用料はご自身のクレジットカードに課金されます。想定外の頻度で実行されていないか、
-  たまにGitHub ActionsのログとAPIの請求ダッシュボードを確認してください
+- **SNS系の4つは完全自動投稿です。** 生成内容に誤りや不適切な表現があっても、そのまま公開されます。
+  結果報告メールで事後確認する運用になるため、違和感のある投稿があれば都度手動で削除・修正してください
+- **Threads・Instagramの長期アクセストークンはどちらも60日で失効します。** 失効後は再発行して
+  claude.ai/code側の環境変数を更新する必要があります
+- **X APIの無料プランには月間投稿数の上限があります。** developer.x.comのダッシュボードで確認してください
+- **routineのクラウドサンドボックスにffmpegやpipパッケージが未インストールの場合、
+  routine実行時に自動でインストールを試みる**構成にしていますが、サンドボックスの制約で
+  失敗する可能性があります。失敗した場合は実行ログを確認してください
+- **Canva/Gamma連携の無料枠を超えると、Claude Pro以外の課金が発生する可能性があります。** 定期的に
+  それぞれのダッシュボードで利用状況を確認してください
+- **リール動画は `MEDIA_REPO` で指定したPublicリポジトリに一時的に公開されます。** 投稿のたびに古い動画は
+  削除して1本だけ残す運用ですが、その動画の中身(生成画像・BGM)は誰でも閲覧・ダウンロードできる状態になります
 - noteの下書きは、事実確認・表現チェックをしたうえで手動投稿してください(こちらは自動投稿しません)
-- GitHub Actionsの無料枠は、プライベートリポジトリで月2,000分です。このワークフローの実行時間は
-  1回数分程度なので、通常の使用では枠を超えることはまずありません
