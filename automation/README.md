@@ -86,29 +86,45 @@ Fine-grained PAT(Contents: Read and write)を発行して `MEDIA_REPO` / `MEDIA_
 
 このリポジトリには `.env` を置きません(routineはクラウド上の独立したセッションで動くため、
 ローカルの `.env` は読み込まれません)。代わりに、routineが使う **claude.ai/code の環境(Environment)** に
-環境変数として登録します。
+環境変数として登録します。5本のroutineはすべて環境名「Default」を使う設定で作成済みです。
 
-1. https://claude.ai/code を開き、環境(Environments)の設定画面に移動する
-2. routine用に使う環境(既存の「Default」など)を選び、環境変数を追加する画面を開く
-3. 以下を登録する(値は手順1〜4で控えたもの):
+> ⚠ **重要な注意点**: 下記の環境変数の入力欄には、Anthropic自身が
+> 「この環境を使用するすべてのユーザーに表示されるため、シークレットや認証情報は追加しないでください」
+> という警告を出しています。2026年8月時点、claude.ai/codeにはこれとは別の暗号化されたシークレット専用の
+> 保管場所は用意されていません。そのため、この欄にAPIキーを直接貼り付けることになります。
+> **この環境(Default)を他の人と共有・招待しない限り実質的なリスクは低い**ですが、
+> 将来誰かとこの環境を共有する場合は、先に値を再発行してから招待するようにしてください。
 
-| 環境変数名 | 値 |
-|---|---|
-| `GMAIL_ADDRESS` | `goliath24520@gmail.com` |
-| `GMAIL_APP_PASSWORD` | (16桁のアプリパスワード) |
-| `MAIL_TO` | `reon24520@gmail.com` |
-| `X_API_KEY` | Xの API Key |
-| `X_API_SECRET` | Xの API Key Secret |
-| `X_ACCESS_TOKEN` | Xの Access Token |
-| `X_ACCESS_TOKEN_SECRET` | Xの Access Token Secret |
-| `THREADS_USER_ID` | ThreadsユーザーID |
-| `THREADS_ACCESS_TOKEN` | Threads長期アクセストークン |
-| `IG_USER_ID` | Instagram User ID |
-| `IG_ACCESS_TOKEN` | Instagram長期アクセストークン |
-| `MEDIA_REPO` | `あなたのGitHubユーザー名/ai-note-reels-media` |
-| `MEDIA_REPO_TOKEN` | 手順5で発行したFine-grained PAT |
+**登録手順:**
+
+1. https://claude.ai/code を開く(routine一覧ではなく、通常のCode画面でよい)
+2. 画面下部の入力欄の左にある実行環境チップ(例:「ローカル」や環境名が表示されているボタン)をクリックする
+3. 表示されたメニューから「クラウド」にカーソルを合わせ、右に出るサブメニューで **「Default」にマウスを重ねると右側に歯車(⚙)アイコンが出る** ので、それをクリックする
+   (「Default」がまだ選ばれていない場合は、先に一度クリックして選択してから、もう一度チップをクリックしてメニューを開き直すと歯車が出ます)
+4. 「クラウド環境を更新」というダイアログが開く。「環境変数」欄に、以下を **`.env`形式(1行に`KEY=値`)** でそのまま貼り付ける:
+
+```
+GMAIL_ADDRESS=goliath24520@gmail.com
+GMAIL_APP_PASSWORD=(16桁のアプリパスワード)
+MAIL_TO=reon24520@gmail.com
+X_API_KEY=(XのAPI Key)
+X_API_SECRET=(XのAPI Key Secret)
+X_ACCESS_TOKEN=(XのAccess Token)
+X_ACCESS_TOKEN_SECRET=(XのAccess Token Secret)
+THREADS_USER_ID=(ThreadsユーザーID)
+THREADS_ACCESS_TOKEN=(Threads長期アクセストークン)
+IG_USER_ID=(Instagram User ID)
+IG_ACCESS_TOKEN=(Instagram長期アクセストークン、IGAAから始まる)
+MEDIA_REPO=あなたのGitHubユーザー名/ai-note-reels-media
+MEDIA_REPO_TOKEN=(手順5で発行したFine-grained PAT、github_pat_から始まる)
+```
+
+5. 右下の「変更を保存」をクリックする
+6. 「ネットワークアクセス」は初期値の **Trusted** のままでよい(X/Threads/InstagramのAPIや外部サイトへの
+   アクセスに必要)
 
 > `ANTHROPIC_API_KEY` と `OPENAI_API_KEY` はもう不要です(登録しないでください)。
+> Threads・Instagramのアクセストークンを再発行したときも、同じ画面から値を書き換えて保存してください。
 
 ### 7. Canva / Gammaとの連携を確認する(Instagramリールの画像生成用)
 
